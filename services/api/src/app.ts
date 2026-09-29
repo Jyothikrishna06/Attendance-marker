@@ -5,11 +5,18 @@ import { InMemoryAuthRepository, IAuthRepository } from './modules/auth/auth.rep
 import { AuthService } from './modules/auth/auth.service.js';
 import { AuthController } from './modules/auth/auth.controller.js';
 import { createAuthRouter } from './modules/auth/auth.routes.js';
+import { InMemoryPresenceRepository, IPresenceRepository } from './modules/presence/presence.repository.js';
+import { PresenceService } from './modules/presence/presence.service.js';
+import { PresenceController } from './modules/presence/presence.controller.js';
+import { createPresenceRouter } from './modules/presence/presence.routes.js';
 import { authenticate } from './common/middleware/auth.middleware.js';
 import { requireRoles } from './common/middleware/rbac.middleware.js';
 import { errorHandler } from './common/middleware/errorHandler.middleware.js';
 
-export function createApp(customAuthRepo?: IAuthRepository): Express {
+export function createApp(
+  customAuthRepo?: IAuthRepository,
+  customPresenceRepo?: IPresenceRepository
+): Express {
   const app = express();
 
   // Basic Middlewares
@@ -23,9 +30,18 @@ export function createApp(customAuthRepo?: IAuthRepository): Express {
   const authController = new AuthController(authService);
   const authRouter = createAuthRouter(authController);
 
+  const presenceRepo = customPresenceRepo || new InMemoryPresenceRepository();
+  const presenceService = new PresenceService(presenceRepo, authRepo);
+  const presenceController = new PresenceController(presenceService);
+  const presenceRouter = createPresenceRouter(presenceController);
+
   // Mount Auth routes (Support both /auth and /api/v1/auth)
   app.use('/auth', authRouter);
   app.use('/api/v1/auth', authRouter);
+
+  // Mount Presence routes
+  app.use('/presence', presenceRouter);
+  app.use('/api/v1/presence', presenceRouter);
 
   // Root Endpoint - Interactive Developer Landing & API Status
   app.get('/', (req: Request, res: Response) => {

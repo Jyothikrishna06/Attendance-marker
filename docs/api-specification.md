@@ -253,3 +253,205 @@ Binds a physical hardware device to an authenticated resident.
 - `401 AUTH_HEADER_MISSING`: Bearer token missing.
 - `403 ROLE_NOT_AUTHORIZED`: User is not a `RESIDENT`.
 - `409 CONFLICT`: Resident already has an active registered device or device identifier is already bound.
+
+---
+
+## 5. Presence & Curfew Verification Endpoints
+
+The presence workflow manages physical boundary tracking (Hostel Entry/Exit) with anti-replay cryptographic nonces and authoritative server-side timestamps.
+
+### 5.1 Presence State Transition Model
+
+```mermaid
+stateDiagram-v2
+    [*] --> NOT_VERIFIED: Account Initialized
+
+    NOT_VERIFIED --> PENDING_VERIFICATION: POST /presence/entry/start
+    PENDING_VERIFICATION --> VERIFIED_INSIDE: POST /presence/entry/verify (Valid Nonce + Biometrics)
+    PENDING_VERIFICATION --> VERIFICATION_FAILED: Nonce Expired (>60s) or Biometric Canceled
+
+    VERIFIED_INSIDE --> VERIFIED_OUTSIDE: POST /presence/exit
+    VERIFIED_INSIDE --> VERIFIED_INSIDE: Idempotent POST /presence/entry/verify
+    VERIFIED_INSIDE --> [*]: Conflict on duplicate POST /presence/entry/start
+
+    VERIFIED_OUTSIDE --> PENDING_VERIFICATION: POST /presence/entry/start
+    VERIFIED_OUTSIDE --> APPROVED_LEAVE: Warden Approves Leave/Outpass
+    APPROVED_LEAVE --> PENDING_VERIFICATION: Return from Leave -> POST /presence/entry/start
+```
+
+---
+
+### 5.2 `POST /presence/entry/start`
+Initiates a presence verification challenge for the authenticated resident. Enforces the duplicate entry constraint (resident cannot start a new entry if already verified inside).
+
+**Headers:**
+`Authorization: Bearer <accessToken>`
+
+**Request Body (Optional):**
+```json
+{
+  "deviceId": "e0000000-0000-0000-0000-000000000001",
+  "clientMetadata": {
+    "appVersion": "1.0.0",
+    "networkBssid": "hostel-ap-north-1"
+  }
+}
+```
+
+**Success Response (200 OK):**
+```json
+{
+  "data": {
+    "sessionId": "9a1b2c3d-0000-0000-0000-000000000001",
+    "challengeNonce": "4a7f9b8c2d1e0f3a5b7c9e1d3f5a7b9c2d1e0f3a5b7c9e1d3f5a7b9c2d1e0f3a",
+    "challengeIssuedAt": "2026-09-29T14:30:00.000Z",
+    "challengeExpiresAt": "2026-09-29T14:31:00.000Z",
+    "deviceId": "e0000000-0000-0000-0000-000000000001",
+    "residentId": "d0000000-0000-0000-0000-000000000001"
+  },
+  "message": "Verification challenge issued. Complete challenge before expiry."
+}
+```
+
+**Error Responses:**
+- `403 FORBIDDEN`: No active registered device or wrong hardware.
+- `409 CONFLICT`: Duplicate active entry rejected (resident is already inside).
+
+---
+
+### 5.3 `POST /presence/entry/verify`
+Submits challenge response and native biometric confirmation. Server verifies proof, consumes nonce, and creates an immutable presence record with **authoritative server timestamps**.
+
+**Headers:**
+`Authorization: Bearer <accessToken>`
+`Idempotency-Key: <unique-client-uuid>` (Optional)
+
+**Request Body:**
+```json
+{
+  "sessionId": "9a1b2c3d-0000-0000-0000-000000000001",
+  "challengeNonce": "4a7f9b8c2d1e0f3a5b7c9e1d3f5a7b9c2d1e0f3a5b7c9e1d3f5a7b9c2d1e0f3a",
+  "biometricConfirmed": true,
+  "networkMetadata": {
+    "subnet": "10.42.0.0/16"
+  }
+}
+```
+
+**Success Response (200 OK):**
+```json
+{
+  "data": {
+    "eventId": "f1e2d3c4-0000-0000-0000-000000000001",
+    "residentId": "d0000000-0000-0000-0000-000000000001",
+    "eventType": "ENTRY",
+    "status": "VERIFIED_INSIDE",
+    "serverTimestamp": "2026-09-29T14:30:15.123Z",
+    "curfewDate": "2026-09-29",
+    "sessionId": "9a1b2c3d-0000-0000-0000-000000000001"
+  },
+  "message": "Presence verified successfully: Inside Hostel"
+}
+```
+
+**Error Responses:**
+- `400 VALIDATION_ERROR`: Challenge expired (>60s).
+- `401 CHALLENGE_ALREADY_USED`: Replay attack attempt.
+- `401 BIOMETRIC_FAILED`: Device biometric prompt was canceled or failed.
+- `401 INVALID_CHALLENGE_PROOF`: Nonce hash mismatch.
+
+---
+
+### 5.4 `POST /presence/exit`
+Records physical hostel departure, transitioning status to `VERIFIED_OUTSIDE`.
+
+**Headers:**
+`Authorization: Bearer <accessToken>`
+
+**Request Body (Optional):**
+```json
+{
+  "reason": "Attending campus library study session"
+}
+```
+
+**Success Response (200 OK):**
+```json
+{
+  "data": {
+    "eventId": "f2e3d4c5-0000-0000-0000-000000000002",
+    "residentId": "d0000000-0000-0000-0000-000000000001",
+    "eventType": "EXIT",
+    "status": "VERIFIED_OUTSIDE",
+    "serverTimestamp": "2026-09-29T17:00:00.000Z",
+    "curfewDate": "2026-09-29"
+  },
+  "message": "Exit recorded successfully: Outside Hostel"
+}
+```
+
+---
+
+### 5.5 `GET /presence/me`
+Retrieves current presence state, active device, and recent presence audit logs for the authenticated student.
+
+**Headers:**
+`Authorization: Bearer <accessToken>`
+
+**Success Response (200 OK):**
+```json
+{
+  "data": {
+    "residentId": "d0000000-0000-0000-0000-000000000001",
+    "currentStatus": "VERIFIED_INSIDE",
+    "lastEventType": "ENTRY",
+    "lastEventTimestamp": "2026-09-29T14:30:15.123Z",
+    "activeDevice": {
+      "id": "e0000000-0000-0000-0000-000000000001",
+      "deviceModel": "Google Pixel 8",
+      "status": "ACTIVE"
+    },
+    "recentEvents": [
+      {
+        "id": "f1e2d3c4-0000-0000-0000-000000000001",
+        "eventType": "ENTRY",
+        "status": "VERIFIED_INSIDE",
+        "serverTimestamp": "2026-09-29T14:30:15.123Z",
+        "curfewDate": "2026-09-29"
+      }
+    ]
+  }
+}
+```
+
+---
+
+### 5.6 `GET /presence/status`
+Warden/Admin administrative overview or single-resident presence lookup.
+
+**Permitted Roles:** `WARDEN`, `ADMIN`, `SUPER_ADMIN` (or `RESIDENT` for self-lookup)
+
+**Query Parameters:**
+- `hostelId` (Optional): Filter by hostel
+- `residentId` (Optional): Lookup specific resident status
+
+**Success Response (200 OK for Warden):**
+```json
+{
+  "data": {
+    "summary": {
+      "totalTracked": 142,
+      "verifiedInside": 135,
+      "verifiedOutside": 7
+    },
+    "roster": [
+      {
+        "residentId": "d0000000-0000-0000-0000-000000000001",
+        "status": "VERIFIED_INSIDE",
+        "lastSeen": "2026-09-29T14:30:15.123Z"
+      }
+    ]
+  }
+}
+```
+
