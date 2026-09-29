@@ -1,16 +1,24 @@
 import 'package:flutter/material.dart';
+import '../../../core/biometrics/biometric_result.dart';
+import '../../../core/biometrics/biometric_service.dart';
 import '../../../core/network/api_client.dart';
 import '../../auth/state/auth_notifier.dart';
+import '../../presence/models/presence_model.dart';
+import '../../presence/services/presence_service.dart';
 import '../../profile/presentation/profile_screen.dart';
 
 class HomeDashboardScreen extends StatefulWidget {
   final AuthNotifier authNotifier;
   final ApiClient apiClient;
+  final PresenceService? presenceService;
+  final IBiometricService? biometricService;
 
   const HomeDashboardScreen({
     super.key,
     required this.authNotifier,
     required this.apiClient,
+    this.presenceService,
+    this.biometricService,
   });
 
   @override
@@ -18,15 +26,21 @@ class HomeDashboardScreen extends StatefulWidget {
 }
 
 class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
+  late final PresenceService _presenceService;
   bool _isLoading = false;
   bool _isOffline = false;
   String _curfewStatus = 'PENDING_VERIFICATION';
-  String _curfewTime = '21:30';
+  final String _curfewTime = '21:30';
   String? _lastVerificationTime;
 
   @override
   void initState() {
     super.initState();
+    _presenceService = widget.presenceService ??
+        PresenceService(
+          apiClient: widget.apiClient,
+          biometricService: widget.biometricService ?? LocalAuthBiometricService(),
+        );
     _fetchCurfewStatus();
   }
 
@@ -37,12 +51,16 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     });
 
     try {
-      // Connect to resident home endpoint
-      final response = await widget.apiClient.get('/resident/home');
-      if (mounted && response != null) {
+      final data = await _presenceService.getMyPresence();
+      if (mounted) {
         setState(() {
-          _curfewStatus = 'VERIFIED_INSIDE';
-          _lastVerificationTime = 'Today, 20:15';
+          final serverStatus = data['currentStatus'] as String? ?? 'PENDING_VERIFICATION';
+          _curfewStatus = serverStatus;
+          if (data['lastEventTimestamp'] != null) {
+            final dt = DateTime.parse(data['lastEventTimestamp'] as String).toLocal();
+            _lastVerificationTime =
+                'Today, ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+          }
         });
       }
     } catch (e) {
@@ -58,10 +76,201 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     }
   }
 
+  Future<void> _onVerifyPresencePressed() async {
+    if (_isLoading) return;
+
+    setState(() {
+      _isLoading = true;
+      _isOffline = false;
+    });
+
+    try {
+      final result = await _presenceService.verifyEntryFlow();
+
+      if (!mounted) return;
+
+      switch (result.status) {
+        case PresenceFlowStatus.verified:
+          final now = TimeOfDay.now();
+          final formattedTime =
+              'Today, ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+          setState(() {
+            _curfewStatus = 'VERIFIED_INSIDE';
+            _lastVerificationTime = formattedTime;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: const [
+                  Icon(Icons.check_circle, color: Colors.white),
+                  SizedBox(width: 10),
+                  Text('Presence verified successfully: Inside Hostel'),
+                ],
+              ),
+              backgroundColor: Colors.green.shade700,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          break;
+
+        case PresenceFlowStatus.biometricAborted:
+          final bio = result.biometricResult;
+          if (bio == null) break;
+
+          if (bio.type == BiometricResultType.cancelled) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Biometric verification cancelled by resident.'),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          } else if (bio.type == BiometricResultType.lockedOutTemporarily ||
+              bio.type == BiometricResultType.lockedOutPermanently) {
+            _showSecurityDialog(
+              title: 'Biometric Sensor Locked Out',
+              content: bio.message,
+              icon: Icons.lock_clock,
+              color: Colors.red.shade700,
+            );
+          } else if (bio.type == BiometricResultType.notAvailable ||
+              bio.type == BiometricResultType.notEnrolled) {
+            _showSecurityDialog(
+              title: 'Biometric Setup Required',
+              content: bio.message,
+              icon: Icons.fingerprint,
+              color: Colors.amber.shade800,
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(bio.message),
+                backgroundColor: Colors.red.shade700,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+          break;
+
+        case PresenceFlowStatus.networkUnauthorized:
+          _showSecurityDialog(
+            title: 'Hostel Wi-Fi Required',
+            content: result.message,
+            icon: Icons.wifi_password,
+            color: Colors.red.shade700,
+          );
+          break;
+
+        case PresenceFlowStatus.offline:
+          setState(() => _isOffline = true);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.message),
+              backgroundColor: Colors.red.shade700,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          break;
+
+        case PresenceFlowStatus.serverRejected:
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.message),
+              backgroundColor: Colors.red.shade700,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          break;
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _onRecordExitPressed() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Record Hostel Departure'),
+        content: const Text(
+          'Are you leaving the hostel premises? This will update your presence status to Outside Hostel.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade800),
+            child: const Text('Confirm Departure', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    setState(() => _isLoading = true);
+    try {
+      await _presenceService.recordExit(reason: 'Resident departing hostel');
+      if (mounted) {
+        setState(() {
+          _curfewStatus = 'VERIFIED_OUTSIDE';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Hostel departure recorded: Status is Outside Hostel'),
+            backgroundColor: Colors.blue.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to record exit: $e'),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _showSecurityDialog({
+    required String title,
+    required String content,
+    required IconData icon,
+    required Color color,
+  }) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(icon, color: color, size: 40),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        content: Text(content),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Dismiss'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = widget.authNotifier.user;
     final device = user?.activeDevice;
+    final isInside = _curfewStatus == 'VERIFIED_INSIDE';
 
     return Scaffold(
       appBar: AppBar(
@@ -105,7 +314,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'You are currently offline. Verification requires internet connectivity.',
+                          'You are currently offline. Verification requires connection to hostel network.',
                           style: TextStyle(color: Colors.red.shade900, fontSize: 13),
                         ),
                       ),
@@ -224,27 +433,49 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
               const SizedBox(height: 24),
 
               // Action Buttons
-              ElevatedButton.icon(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Starting presence verification challenge sequence...'),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.fingerprint),
-                label: const Text(
-                  'Verify Presence Now',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              if (!isInside)
+                ElevatedButton.icon(
+                  onPressed: _isLoading ? null : _onVerifyPresencePressed,
+                  icon: _isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.fingerprint),
+                  label: Text(
+                    _isLoading ? 'Verifying Presence...' : 'Verify Presence Now',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: Colors.white,
+                  ),
+                )
+              else
+                OutlinedButton.icon(
+                  onPressed: _isLoading ? null : _onRecordExitPressed,
+                  icon: _isLoading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.logout),
+                  label: const Text(
+                    'Record Hostel Departure (Exit)',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    foregroundColor: Colors.amber.shade900,
+                    side: BorderSide(color: Colors.amber.shade800),
+                  ),
                 ),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  foregroundColor: Colors.white,
-                ),
-              ),
+
               const SizedBox(height: 12),
 
               OutlinedButton.icon(
@@ -274,6 +505,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     switch (status) {
       case 'VERIFIED_INSIDE':
         return Colors.green.shade700;
+      case 'VERIFIED_OUTSIDE':
+        return Colors.blue.shade700;
       case 'APPROVED_LEAVE':
         return Colors.blue.shade700;
       case 'PENDING_VERIFICATION':

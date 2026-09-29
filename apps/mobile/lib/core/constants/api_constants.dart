@@ -25,10 +25,13 @@ class ApiConstants {
   static const String activate = '/auth/activate';
   static const String registerDevice = '/auth/device/register';
 
-  // Resident endpoints
+  // Resident & Presence endpoints
   static const String residentHome = '/resident/home';
   static const String residentProfile = '/resident/profile';
   static const String presenceStatus = '/presence/me';
+  static const String presenceEntryStart = '/presence/entry/start';
+  static const String presenceEntryVerify = '/presence/entry/verify';
+  static const String presenceExit = '/presence/exit';
   static const String leaveRequests = '/leave';
 
   // Secure storage keys
