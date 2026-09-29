@@ -25,11 +25,19 @@ import { authenticate } from './common/middleware/auth.middleware.js';
 import { requireRoles } from './common/middleware/rbac.middleware.js';
 import { errorHandler } from './common/middleware/errorHandler.middleware.js';
 
+import {
+  ICurfewEvaluationRepository,
+  InMemoryCurfewEvaluationRepository,
+  CurfewEvaluationService,
+  CurfewEvaluationController,
+} from './modules/curfew-evaluation/index.js';
+
 export function createApp(
   customAuthRepo?: IAuthRepository,
   customPresenceRepo?: IPresenceRepository,
   customNetworkProvider?: INetworkEvidenceProvider,
-  customAdminRepo?: IAdminRepository
+  customAdminRepo?: IAdminRepository,
+  customCurfewEvalRepo?: ICurfewEvaluationRepository
 ): Express {
   const app = express();
 
@@ -57,7 +65,17 @@ export function createApp(
   const adminRepo = customAdminRepo || new InMemoryAdminRepository();
   const adminService = new AdminService(adminRepo, authRepo, presenceRepo);
   const adminController = new AdminController(adminService);
-  const adminRouter = createAdminRouter(adminController);
+
+  const curfewEvalRepo = customCurfewEvalRepo || new InMemoryCurfewEvaluationRepository();
+  const curfewEvalService = new CurfewEvaluationService(
+    adminRepo,
+    authRepo,
+    presenceRepo,
+    curfewEvalRepo
+  );
+  const curfewEvalController = new CurfewEvaluationController(curfewEvalService);
+
+  const adminRouter = createAdminRouter(adminController, curfewEvalController);
   const curfewPublicRouter = createCurfewPublicRouter(adminController);
 
   // Mount Auth routes (Support both /auth and /api/v1/auth)

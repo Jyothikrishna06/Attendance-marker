@@ -3,7 +3,12 @@ import { AdminController } from './admin.controller.js';
 import { authenticate } from '../../common/middleware/auth.middleware.js';
 import { requireRoles } from '../../common/middleware/rbac.middleware.js';
 
-export function createAdminRouter(controller: AdminController): Router {
+import { CurfewEvaluationController } from '../curfew-evaluation/index.js';
+
+export function createAdminRouter(
+  controller: AdminController,
+  evalController?: CurfewEvaluationController
+): Router {
   const router = Router();
 
   // Enforce authentication on all admin/warden endpoints
@@ -16,6 +21,12 @@ export function createAdminRouter(controller: AdminController): Router {
   router.post('/curfew', adminGuard, controller.createCurfewRule);
   router.patch('/curfew/:id', adminGuard, controller.updateCurfewRule);
   router.get('/curfew/status', adminGuard, controller.getCurfewStatus);
+
+  // Curfew Automated Evaluation Engine
+  if (evalController) {
+    router.post('/curfew/evaluate', adminGuard, evalController.evaluateCurfew);
+    router.get('/curfew/evaluation', adminGuard, evalController.getEvaluationHistory);
+  }
 
   // Leave Adjudication
   router.get('/leave', adminGuard, controller.getLeaveRequests);

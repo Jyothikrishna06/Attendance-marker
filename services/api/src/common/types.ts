@@ -206,3 +206,29 @@ export interface AdminAction {
   createdAt: Date;
 }
 
+export type CurfewEvaluationStatus =
+  | 'VERIFIED_INSIDE'
+  | 'APPROVED_LEAVE'
+  | 'PENDING_VERIFICATION'
+  | 'NOT_VERIFIED'
+  | 'VERIFICATION_FAILED';
+
+export interface CurfewEvaluationRecord {
+  id: string;
+  residentId: string;
+  hostelId: string;
+  curfewDate: string; // YYYY-MM-DD
+  status: CurfewEvaluationStatus;
+  statusReason: string;
+  curfewDeadline: Date;
+  graceDeadline: Date;
+  isLateReturn: boolean;
+  lateMinutes?: number | null;
+  resolvedEventId?: string | null;
+  resolvedLeaveId?: string | null;
+  evaluatedAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+

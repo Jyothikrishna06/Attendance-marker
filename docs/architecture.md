@@ -156,3 +156,75 @@ To prevent curfew circumvention through device clock manipulation:
 - **Client Timestamp Isolation**: Client-provided timestamps are relegated to untrusted debug fields and are never used to compute curfew status, grace periods, or violation flags.
 - **Single Active Entry Constraint**: A resident cannot initiate or verify a new entry if they already have an active `VERIFIED_INSIDE` status without an intervening `EXIT` event (`409 Conflict`).
 - **Idempotency Support**: Critical operations (`/presence/entry/verify`, `/presence/exit`) support `Idempotency-Key` headers, guaranteeing at-most-once execution during transient network retries.
+
+---
+
+### 5. Curfew Evaluation State Machine & Automated Engine Architecture
+
+The Curfew Evaluation Engine (`services/api/src/modules/curfew-evaluation`) is an automated, deterministic service responsible for calculating and persisting the official curfew compliance status of every active hostel resident on any given date.
+
+#### 5.1 Resident Curfew State Machine
+
+Every resident is deterministically categorized into one of five mutually exclusive states:
+- `PENDING_VERIFICATION`: The curfew enforcement window is open or upcoming, and the resident has not yet verified presence inside the hostel.
+- `VERIFIED_INSIDE`: The resident successfully completed multi-factor entry verification prior to the curfew grace deadline and has not exited.
+- `APPROVED_LEAVE`: The resident holds an approved leave request covering the curfew enforcement window ($[T_{\text{curfew}}, T_{\text{grace}}]$).
+- `NOT_VERIFIED`: The grace deadline elapsed with no verified entry, OR the resident checked in after the grace deadline (late return).
+- `VERIFICATION_FAILED`: The resident submitted a verification attempt that failed (e.g. unauthorized network, biometric mismatch, replay detected) without subsequent successful verification, or their presence record was flagged as anomalous.
+
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING_VERIFICATION : Curfew window initialized
+
+    PENDING_VERIFICATION --> APPROVED_LEAVE : Approved leave request overlaps [T_curfew, T_grace]
+    PENDING_VERIFICATION --> VERIFIED_INSIDE : Multi-factor entry verified before T_grace
+    PENDING_VERIFICATION --> VERIFICATION_FAILED : Verification attempt rejected / anomaly flagged
+    PENDING_VERIFICATION --> NOT_VERIFIED : T_grace expires without entry
+
+    VERIFICATION_FAILED --> VERIFIED_INSIDE : Resident retries & successfully verifies before T_grace
+    NOT_VERIFIED --> NOT_VERIFIED : Resident checks in after T_grace (Late Return flagged)
+
+    VERIFIED_INSIDE --> [*] : Curfew cycle concluded (Compliant)
+    APPROVED_LEAVE --> [*] : Curfew cycle concluded (Excused)
+    NOT_VERIFIED --> [*] : Curfew cycle concluded (Non-compliant / Late)
+    VERIFICATION_FAILED --> [*] : Curfew cycle concluded (Breach / Failed)
+```
+
+#### 5.2 Curfew Windows and Temporal Deadlines
+
+Deadlines are calculated in ISO 8601 format with explicit timezone offsets (e.g. `+05:30` for Indian Standard Time), guaranteeing deterministic evaluations across distributed server clusters regardless of host OS timezone settings:
+
+$$T_{\text{curfew}} = \text{ISO}(\text{curfewDate}, \text{curfewTime}, \text{timezoneOffset})$$
+$$T_{\text{grace}} = T_{\text{curfew}} + \Delta_{\text{graceMinutes}} \times 60000$$
+
+1. **Active Check-In Window**: $[T_{\text{curfew}} - \Delta_{\text{lookback}}, T_{\text{curfew}}]$
+   - Residents may begin checking in through the mobile app upon arriving at the hostel LAN perimeter.
+   - Status remains `PENDING_VERIFICATION` until verification succeeds.
+2. **Grace Window**: $[T_{\text{curfew}}, T_{\text{grace}}]$ (Default: 15 minutes)
+   - Allowable transit/arrival margin. Entries during this window are certified as on-time (`VERIFIED_INSIDE`).
+3. **Post-Grace / Violation Window**: $t > T_{\text{grace}}$
+   - Any resident who has not verified and has no approved leave transitions from `PENDING_VERIFICATION` to `NOT_VERIFIED`.
+   - Subsequent check-ins are recorded as **Late Returns** (`isLateReturn: true`), with exact elapsed minutes:
+     $$\Delta_{\text{late}} = \left\lceil \frac{T_{\text{entry}} - T_{\text{grace}}}{60000} \right\rceil$$
+
+#### 5.3 Deterministic Decision Matrix
+
+The pure evaluation function (`evaluateResidentCurfew`) processes resident evidence according to the following precedence hierarchy:
+
+| Priority | Evaluation Condition | Resulting Status | Key Metadata Persisted |
+| :--- | :--- | :--- | :--- |
+| **1** | Approved Leave request exists with `leaveStart <= T_grace` and `leaveEnd >= T_curfew` | `APPROVED_LEAVE` | `resolvedLeaveId`, leave type, end date |
+| **2** | Most recent presence event before $T_{\text{grace}}$ has `status == 'FLAGGED'` | `VERIFICATION_FAILED` | `resolvedEventId`, anomaly rationale |
+| **3** | Most recent presence event before $T_{\text{grace}}$ is `ENTRY` with `status == 'VERIFIED_INSIDE'` | `VERIFIED_INSIDE` | `resolvedEventId`, server timestamp |
+| **4** | Entry verified strictly after $T_{\text{grace}}$ (Late Check-in) | `NOT_VERIFIED` | `resolvedEventId`, `isLateReturn = true`, `lateMinutes` |
+| **5** | Verification attempt in curfew window has `status IN ('FAILED', 'REJECTED')` without subsequent successful entry | `VERIFICATION_FAILED` | Failure reason (e.g., `NETWORK_NOT_AUTHORIZED`) |
+| **6** | Server evaluation time $t > T_{\text{grace}}$ with no presence and no leave | `NOT_VERIFIED` | Deadline elapsed rationale |
+| **7** | Server evaluation time $t \le T_{\text{grace}}$ with no presence recorded | `PENDING_VERIFICATION` | Awaiting check-in rationale |
+
+#### 5.4 Edge Case Resolution & Security Principles
+
+- **Transient Failure Recovery**: If a resident experiences a transient network or biometric failure at 21:05 but succeeds in completing verification at 21:12 before $T_{\text{grace}}$, the successful entry supersedes the prior failure. The resident is certified as `VERIFIED_INSIDE`.
+- **Chronological Deduplication**: If multiple entry events exist for the same resident (e.g. repeated mobile taps), events are sorted chronologically (`serverTimestamp`). A later `EXIT` invalidates an earlier `ENTRY`, ensuring residents who verified inside and subsequently exited before curfew are not erroneously marked inside.
+- **Timezone-Safe Cross-Midnight Curfews**: Date and time strings are parsed with explicit UTC offsets (`normalizeTimezoneOffset`). For example, in IST (`+05:30`), a 21:30 curfew translates to 16:00 UTC of the same calendar date, while a 00:30 midnight curfew correctly advances to the next UTC day without date boundary regressions.
+- **Warden & System Auditability**: Every evaluation cycle records an immutable snapshot in the `curfew_evaluations` repository. Wardens can trigger on-demand re-evaluations via `POST /admin/curfew/evaluate` or query historical records via `GET /admin/curfew/evaluation`.
+
