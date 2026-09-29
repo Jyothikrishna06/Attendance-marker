@@ -359,6 +359,8 @@ Submits challenge response and native biometric confirmation. Server verifies pr
 - `401 CHALLENGE_ALREADY_USED`: Replay attack attempt.
 - `401 BIOMETRIC_FAILED`: Device biometric prompt was canceled or failed.
 - `401 INVALID_CHALLENGE_PROOF`: Nonce hash mismatch.
+- `403 NETWORK_NOT_AUTHORIZED`: Request IP is outside the authorized hostel subnet or institutional gateway handshake token was missing/invalid.
+- `409 CONFLICT`: Duplicate active entry rejected (resident is already inside).
 
 ---
 

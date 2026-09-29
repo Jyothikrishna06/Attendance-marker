@@ -1,5 +1,6 @@
 import { IPresenceRepository } from './presence.repository.js';
 import { IAuthRepository } from '../auth/auth.repository.js';
+import { INetworkEvidenceProvider } from '../network/network.interface.js';
 import { generateRandomToken, hashToken } from '../../core/crypto.js';
 import {
   UnauthorizedError,
@@ -41,7 +42,8 @@ export interface ExitResponse {
 export class PresenceService {
   constructor(
     private readonly presenceRepo: IPresenceRepository,
-    private readonly authRepo: IAuthRepository
+    private readonly authRepo: IAuthRepository,
+    private readonly networkProvider?: INetworkEvidenceProvider
   ) {}
 
   /**
@@ -116,6 +118,8 @@ export class PresenceService {
       biometricConfirmed: boolean;
       networkMetadata?: Record<string, unknown>;
       idempotencyKey?: string;
+      clientIp?: string;
+      headers?: Record<string, string | string[] | undefined>;
     }
   ): Promise<VerifyEntryResponse> {
     // 1. Idempotency Check
@@ -184,7 +188,41 @@ export class PresenceService {
       );
     }
 
-    // 7. Prevent Duplicate Active Entries at time of verification
+    // 7. Security Check: Institution-Controlled Network Presence Verification
+    let networkEvidence: Record<string, unknown> = data.networkMetadata || {};
+    if (this.networkProvider) {
+      const networkResult = await this.networkProvider.verifyNetworkEvidence({
+        clientIp: data.clientIp || '127.0.0.1',
+        hostelId: resident.hostelId,
+        residentId: resident.id,
+        headers: data.headers,
+        clientMetadata: data.networkMetadata,
+      });
+
+      if (!networkResult.verified) {
+        await this.presenceRepo.updateVerificationAttempt(attempt.id, {
+          status: 'FAILED',
+          failureReason: networkResult.failureReason || 'NETWORK_NOT_AUTHORIZED',
+          networkVerified: false,
+        });
+        throw new ForbiddenError(
+          'Network verification failed: Device is not connected to an authorized hostel network.',
+          'NETWORK_NOT_AUTHORIZED',
+          {
+            provider: networkResult.providerName,
+            failureReason: networkResult.failureReason,
+            evidence: networkResult.evidence,
+          }
+        );
+      }
+
+      networkEvidence = {
+        ...networkEvidence,
+        ...networkResult.evidence,
+      };
+    }
+
+    // 8. Prevent Duplicate Active Entries at time of verification
     const latestEvent = await this.presenceRepo.findLatestPresenceEvent(resident.id);
     if (latestEvent && latestEvent.eventType === 'ENTRY' && latestEvent.status === 'VERIFIED_INSIDE') {
       throw new ConflictError(
@@ -192,7 +230,7 @@ export class PresenceService {
       );
     }
 
-    // 8. Authoritative Server Clock & Event Generation
+    // 9. Authoritative Server Clock & Event Generation
     const serverTimestamp = new Date();
     const curfewDate = serverTimestamp.toISOString().split('T')[0];
 
@@ -213,7 +251,7 @@ export class PresenceService {
       serverTimestamp,
       curfewDate,
       status: 'VERIFIED_INSIDE',
-      networkEvidence: data.networkMetadata || {},
+      networkEvidence,
     });
 
     const response: VerifyEntryResponse = {

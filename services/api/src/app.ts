@@ -9,13 +9,15 @@ import { InMemoryPresenceRepository, IPresenceRepository } from './modules/prese
 import { PresenceService } from './modules/presence/presence.service.js';
 import { PresenceController } from './modules/presence/presence.controller.js';
 import { createPresenceRouter } from './modules/presence/presence.routes.js';
+import { MockNetworkProvider, INetworkEvidenceProvider } from './modules/network/index.js';
 import { authenticate } from './common/middleware/auth.middleware.js';
 import { requireRoles } from './common/middleware/rbac.middleware.js';
 import { errorHandler } from './common/middleware/errorHandler.middleware.js';
 
 export function createApp(
   customAuthRepo?: IAuthRepository,
-  customPresenceRepo?: IPresenceRepository
+  customPresenceRepo?: IPresenceRepository,
+  customNetworkProvider?: INetworkEvidenceProvider
 ): Express {
   const app = express();
 
@@ -30,8 +32,9 @@ export function createApp(
   const authController = new AuthController(authService);
   const authRouter = createAuthRouter(authController);
 
+  const networkProvider = customNetworkProvider || new MockNetworkProvider();
   const presenceRepo = customPresenceRepo || new InMemoryPresenceRepository();
-  const presenceService = new PresenceService(presenceRepo, authRepo);
+  const presenceService = new PresenceService(presenceRepo, authRepo, networkProvider);
   const presenceController = new PresenceController(presenceService);
   const presenceRouter = createPresenceRouter(presenceController);
 

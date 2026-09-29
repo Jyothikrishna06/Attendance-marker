@@ -54,6 +54,11 @@ export class PresenceController {
       }
       const data = verifyEntrySchema.parse(req.body);
       const idempotencyKey = (req.headers['idempotency-key'] as string) || data.idempotencyKey;
+      const clientIp =
+        (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
+        req.ip ||
+        req.socket.remoteAddress ||
+        '127.0.0.1';
 
       const result = await this.presenceService.verifyEntry(req.user.userId, {
         sessionId: data.sessionId,
@@ -61,6 +66,8 @@ export class PresenceController {
         biometricConfirmed: data.biometricConfirmed,
         networkMetadata: data.networkMetadata,
         idempotencyKey,
+        clientIp,
+        headers: req.headers,
       });
 
       res.status(200).json({
