@@ -60,12 +60,14 @@ sequenceDiagram
 | `POST /presence/entry/verify`| `RESIDENT` | Verifies multi-factor evidence & completes entry |
 | `POST /presence/exit` | `RESIDENT` | Records resident exit |
 | `GET /presence/me` | `RESIDENT` | Current presence status & recent events |
-| `GET /presence/status` | `RESIDENT`, `WARDEN`, `ADMIN` | Presence roster / summary view |
-| `POST /verification/challenge/generate` | `RESIDENT` | Rate-limited (10 req/min), 32-byte nonce, 60s TTL |
-| `POST /verification/challenge/verify` | `RESIDENT` | Rate-limited (15 req/min), anti-replay, single-use |
-| `GET /resident/*` | `RESIDENT` | Resident curfew status & challenges |
-| `GET /warden/*` | `WARDEN`, `ADMIN`, `SUPER_ADMIN` | Curfew rosters, alerts, exceptions |
-| `GET /admin/*` | `ADMIN`, `SUPER_ADMIN` | Global hostel configs, audit ledgers |
+| `GET /curfew/current` | `RESIDENT`, `WARDEN`, `ADMIN`, `SUPER_ADMIN` | Today's active curfew policy and deadlines |
+| `POST /admin/curfew` | `WARDEN`, `ADMIN`, `SUPER_ADMIN` | Create hostel curfew policy rule |
+| `PATCH /admin/curfew/:id` | `WARDEN`, `ADMIN`, `SUPER_ADMIN` | Amend curfew time or grace window |
+| `GET /admin/curfew/status` | `WARDEN`, `ADMIN`, `SUPER_ADMIN` | Live curfew roster with failure alerts & filters |
+| `GET /admin/leave` | `WARDEN`, `ADMIN`, `SUPER_ADMIN` | Leave approval queue & history |
+| `PATCH /admin/leave/:id` | `WARDEN`, `ADMIN`, `SUPER_ADMIN` | Adjudicate leave with mandatory reason |
+| `POST /admin/presence/correct`| `WARDEN`, `ADMIN`, `SUPER_ADMIN` | Transactional presence correction + audit log |
+| `GET /admin/audit` | `WARDEN`, `ADMIN`, `SUPER_ADMIN` | Query immutable audit ledger |
 
 ---
 
@@ -584,5 +586,217 @@ Submits a cryptographic challenge proof for verification and atomic consumption.
 | `404 Not Found` | `CHALLENGE_NOT_FOUND` | No challenge exists matching the supplied `challengeId`. |
 | `409 Conflict` | `DUPLICATE_CHALLENGE_SUBMISSION` | Duplicate attempt submitted without matching idempotency key. |
 | `429 Too Many Requests` | `TOO_MANY_REQUESTS` | Rate limit exceeded (10 req/min for generate, 15 req/min for verify). `Retry-After` header returned. |
+
+---
+
+## 7. Warden & Administrative Management Endpoints
+
+The system provides staff operational interfaces for curfew management, real-time presence monitoring, leave request adjudication, transactional presence record corrections, and immutable audit logs.
+
+### 7.1 `GET /curfew/current`
+Returns the active curfew enforcement policy and calculated deadlines for today.
+
+- **Permitted Roles**: `RESIDENT`, `WARDEN`, `ADMIN`, `SUPER_ADMIN`
+- **Query Parameters**:
+  - `hostelId` (Optional): Filter by specific hostel UUID
+- **Success Response (200 OK):**
+```json
+{
+  "data": {
+    "ruleId": "70000000-0000-0000-0000-000000000001",
+    "hostelId": "a0000000-0000-0000-0000-000000000001",
+    "hostelName": "Aryabhata Hall of Residence",
+    "curfewTime": "21:30:00",
+    "gracePeriodMinutes": 15,
+    "curfewDeadline": "2026-09-29T21:30:00.000Z",
+    "graceDeadline": "2026-09-29T21:45:00.000Z",
+    "dayOfWeek": null,
+    "curfewDate": "2026-09-29"
+  },
+  "message": "Current curfew policy retrieved successfully"
+}
+```
+
+---
+
+### 7.2 `POST /admin/curfew`
+Creates a new curfew rule for a hostel.
+
+- **Permitted Roles**: `WARDEN`, `ADMIN`, `SUPER_ADMIN`
+- **Request Body:**
+```json
+{
+  "hostelId": "a0000000-0000-0000-0000-000000000001",
+  "dayOfWeek": 5,
+  "curfewTime": "22:00:00",
+  "gracePeriodMinutes": 20,
+  "justification": "Extended Friday curfew for weekend campus events"
+}
+```
+- **Success Response (201 Created):** Returns created curfew rule object and commits audit log.
+
+---
+
+### 7.3 `PATCH /admin/curfew/:id`
+Amends an existing curfew policy rule.
+
+- **Permitted Roles**: `WARDEN`, `ADMIN`, `SUPER_ADMIN`
+- **Request Body:**
+```json
+{
+  "curfewTime": "22:15:00",
+  "gracePeriodMinutes": 25,
+  "justification": "Adjusted per Student Council resolution"
+}
+```
+- **Success Response (200 OK):** Returns updated rule object and records state diff in `audit_logs`.
+
+---
+
+### 7.4 `GET /admin/curfew/status`
+Retrieves the real-time curfew presence roster and summary metrics.
+
+- **Permitted Roles**: `WARDEN`, `ADMIN`, `SUPER_ADMIN`
+- **Query Parameters**:
+  - `hostelId` (Optional): Filter by hostel UUID or short code (e.g. `HOSTEL-A`)
+  - `floor` (Optional): Filter by building floor number (e.g. `1`, `2`)
+  - `roomNumber` (Optional): Filter by room designation
+  - `status` (Optional): Filter by presence status (`VERIFIED_INSIDE`, `VERIFIED_OUTSIDE`, `APPROVED_LEAVE`, `PENDING_VERIFICATION`, `VERIFICATION_FAILED`)
+- **Success Response (200 OK):**
+```json
+{
+  "data": {
+    "summary": {
+      "totalTracked": 3,
+      "verifiedInside": 1,
+      "verifiedOutside": 0,
+      "approvedLeave": 1,
+      "pendingVerification": 0,
+      "verificationFailed": 1
+    },
+    "roster": [
+      {
+        "residentId": "d0000000-0000-0000-0000-000000000001",
+        "name": "Aarav Patel",
+        "rollNumber": "CS2026-001",
+        "hostelName": "Aryabhata Hall of Residence",
+        "hostelCode": "HOSTEL-A",
+        "roomNumber": "101",
+        "floor": 1,
+        "currentStatus": "VERIFIED_INSIDE",
+        "lastEventType": "ENTRY",
+        "lastSeen": "2026-09-29T20:45:00.000Z",
+        "activeDeviceModel": "Google Pixel 8",
+        "failureAlert": null,
+        "emergencyContact": {
+          "name": "Suresh Patel",
+          "phone": "+919876543210"
+        }
+      }
+    ],
+    "timestamp": "2026-09-29T21:20:00.000Z"
+  }
+}
+```
+
+---
+
+### 7.5 `GET /admin/leave` & `PATCH /admin/leave/:id`
+Adjudicates student outpass and night-out leave applications.
+
+- **Permitted Roles**: `WARDEN`, `ADMIN`, `SUPER_ADMIN`
+- **`GET /admin/leave`**: Returns all leave requests enriched with resident names, room numbers, and hostel codes.
+- **`PATCH /admin/leave/:id`**: Renders approval or rejection decision.
+  - **Request Body**:
+  ```json
+  {
+    "status": "APPROVED",
+    "decisionReason": "Verified parent telephone authorization and conference registration"
+  }
+  ```
+  - **Validation Invariant**: `decisionReason` is strictly mandatory (`MANDATORY_REASON_REQUIRED`). Empty strings or whitespace-only inputs trigger HTTP 400 `VALIDATION_ERROR`.
+  - **Success Response (200 OK)**: Returns updated leave request and records immutable decision log.
+
+---
+
+### 7.6 `POST /admin/presence/correct` (Record Correction)
+Transactionally overrides or corrects a student's presence record based on direct physical verification by hostel staff.
+
+- **Permitted Roles**: `WARDEN`, `ADMIN`, `SUPER_ADMIN`
+- **Aliases**: `PATCH /admin/presence/:id/correct`
+- **Request Body:**
+```json
+{
+  "residentId": "d0000000-0000-0000-0000-000000000001",
+  "status": "VERIFIED_INSIDE",
+  "reason": "Warden physical floor inspection confirmed student was present and asleep in room 101; phone was charging."
+}
+```
+- **Security & Integrity Invariants**:
+  1. **Mandatory Non-Empty Justification**: `reason` must contain non-whitespace text. Rejects with HTTP 400 `VALIDATION_ERROR` (`MANDATORY_REASON_REQUIRED`) if omitted or blank.
+  2. **Authoritative Staff Source Tag**: Marks `source = 'WARDEN_MANUAL'` (or `'ADMIN_OVERRIDE'`).
+  3. **Transactional Immutable Audit Logging**: Concurrently writes an append-only entry into `audit_logs` storing previous state, new state, staff actor ID, staff role, timestamp, and justification reason.
+- **Success Response (200 OK):**
+```json
+{
+  "data": {
+    "eventId": "f1e2d3c4-0000-0000-0000-000000000010",
+    "residentId": "d0000000-0000-0000-0000-000000000001",
+    "previousStatus": "PENDING_VERIFICATION",
+    "newStatus": "VERIFIED_INSIDE",
+    "source": "WARDEN_MANUAL",
+    "serverTimestamp": "2026-09-29T21:30:00.000Z",
+    "reason": "Warden physical floor inspection confirmed student was present and asleep in room 101; phone was charging.",
+    "auditLogId": "90000000-0000-0000-0000-000000000050"
+  },
+  "message": "Presence record corrected successfully with immutable audit log committed"
+}
+```
+
+---
+
+### 7.7 `GET /admin/audit`
+Retrieves immutable system audit records for staff governance and dispute resolution.
+
+- **Permitted Roles**: `WARDEN`, `ADMIN`, `SUPER_ADMIN`
+- **Query Parameters**:
+  - `targetEntity` (Optional): Filter by table name (e.g. `presence_events`, `curfew_rules`, `leave_requests`, `devices`)
+  - `action` (Optional): Filter by action code (e.g. `RECORD_CORRECTION`, `CURFEW_RULE_CREATED`, `LEAVE_APPROVED`)
+  - `limit` (Optional, default 50): Page limit
+- **Success Response (200 OK):**
+```json
+{
+  "data": [
+    {
+      "id": "90000000-0000-0000-0000-000000000050",
+      "actorId": "c0000000-0000-0000-0000-000000000002",
+      "actorRole": "WARDEN",
+      "action": "RECORD_CORRECTION",
+      "targetEntity": "presence_events",
+      "targetId": "f1e2d3c4-0000-0000-0000-000000000010",
+      "previousState": { "status": "PENDING_VERIFICATION" },
+      "newState": { "status": "VERIFIED_INSIDE", "source": "WARDEN_MANUAL" },
+      "reason": "Warden physical floor inspection confirmed student was present and asleep in room 101; phone was charging.",
+      "timestamp": "2026-09-29T21:30:00.000Z"
+    }
+  ],
+  "total": 1
+}
+```
+
+---
+
+### 7.8 React + TypeScript Admin Dashboard Architecture (`apps/admin`)
+
+The frontend application provides staff with an operational console structured into:
+- **`CurfewStatusCard`**: Displays current curfew rule, grace deadlines, countdown, and inline curfew amendment modal.
+- **`CurfewSummaryCards`**: Real-time KPI counters (Total Tracked, Verified Inside, Verified Outside, Approved Leave, Pending, Failed).
+- **`VerificationFailureAlerts`**: Prominent alert banner highlighting failed verification attempts with 1-click investigation.
+- **`FilterBar`**: Multi-dimensional filtering by Hostel, Floor/Block, Room Number, Presence Status, and Student Name/Roll.
+- **`CurfewRosterTable`**: Resident presence roster with live status badges, last seen timestamps, and record correction buttons.
+- **`RecordCorrectionModal`**: Transactional correction form requiring mandatory non-empty justification before commit.
+- **`LeaveApprovalQueue`**: Pending student outpass approval queue with mandatory reason capture.
+- **`AuditLogViewer`**: Immutable ledger view with JSON state diffs and entity filtering.
+
 
 

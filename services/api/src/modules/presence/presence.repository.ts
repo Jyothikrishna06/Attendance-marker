@@ -34,6 +34,9 @@ export interface IPresenceRepository {
   findLatestPresenceEvent(residentId: string): Promise<PresenceEvent | null>;
   findPresenceEventsByResidentId(residentId: string, limit?: number): Promise<PresenceEvent[]>;
   getAllPresenceEvents(): Promise<PresenceEvent[]>;
+  findPresenceEventById(id: string): Promise<PresenceEvent | null>;
+  updatePresenceEvent(id: string, updates: Partial<PresenceEvent>): Promise<PresenceEvent>;
+  getAllVerificationAttempts(): Promise<VerificationAttempt[]>;
 
   getIdempotentResponse(key: string): Promise<IdempotencyRecord | null>;
   saveIdempotentResponse(record: IdempotencyRecord): Promise<void>;
@@ -151,6 +154,29 @@ export class InMemoryPresenceRepository implements IPresenceRepository {
 
   async getAllPresenceEvents(): Promise<PresenceEvent[]> {
     return [...this.presenceEvents];
+  }
+
+  async findPresenceEventById(id: string): Promise<PresenceEvent | null> {
+    const event = this.presenceEvents.find((e) => e.id === id);
+    return event || null;
+  }
+
+  async updatePresenceEvent(id: string, updates: Partial<PresenceEvent>): Promise<PresenceEvent> {
+    const index = this.presenceEvents.findIndex((e) => e.id === id);
+    if (index === -1) {
+      throw new Error(`Presence event ${id} not found`);
+    }
+
+    const updated: PresenceEvent = {
+      ...this.presenceEvents[index],
+      ...updates,
+    };
+    this.presenceEvents[index] = updated;
+    return updated;
+  }
+
+  async getAllVerificationAttempts(): Promise<VerificationAttempt[]> {
+    return Array.from(this.verificationAttempts.values());
   }
 
   async getIdempotentResponse(key: string): Promise<IdempotencyRecord | null> {

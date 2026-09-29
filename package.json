@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "description": "Smart Hostel Curfew & Multi-Factor Presence Verification System",
   "scripts": {
-    "test": "npm run test:db && npm run test:api",
+    "test": "npm run test:db && npm run test:api && npm run test:admin",
     "test:db": "node --test database/tests/schema-constraints.test.js",
-    "test:api": "npm run test:unit --prefix services/api"
+    "test:api": "npm run test:unit --prefix services/api",
+    "test:admin": "npm run test --prefix apps/admin"
   },
   "keywords": [
     "hostel",

@@ -19,6 +19,9 @@ export interface IAuthRepository {
     osName: 'ANDROID' | 'IOS' | 'TEST_OS';
     osVersion: string;
   }): Promise<Device>;
+  findResidentById(id: string): Promise<ResidentProfile | null>;
+  getAllResidents(): Promise<ResidentProfile[]>;
+  getAllUsers(): Promise<User[]>;
 }
 
 /**
@@ -265,5 +268,17 @@ export class InMemoryAuthRepository implements IAuthRepository {
 
     this.devices.set(newDevice.id, newDevice);
     return newDevice;
+  }
+
+  async findResidentById(id: string): Promise<ResidentProfile | null> {
+    return this.residents.get(id) || null;
+  }
+
+  async getAllResidents(): Promise<ResidentProfile[]> {
+    return Array.from(this.residents.values());
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return Array.from(this.users.values());
   }
 }

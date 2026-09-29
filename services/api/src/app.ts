@@ -13,6 +13,14 @@ import { ChallengeService } from './modules/challenge/challenge.service.js';
 import { ChallengeController } from './modules/challenge/challenge.controller.js';
 import { createChallengeRouter } from './modules/challenge/challenge.routes.js';
 import { MockNetworkProvider, INetworkEvidenceProvider } from './modules/network/index.js';
+import {
+  IAdminRepository,
+  InMemoryAdminRepository,
+  AdminService,
+  AdminController,
+  createAdminRouter,
+  createCurfewPublicRouter,
+} from './modules/admin/index.js';
 import { authenticate } from './common/middleware/auth.middleware.js';
 import { requireRoles } from './common/middleware/rbac.middleware.js';
 import { errorHandler } from './common/middleware/errorHandler.middleware.js';
@@ -20,7 +28,8 @@ import { errorHandler } from './common/middleware/errorHandler.middleware.js';
 export function createApp(
   customAuthRepo?: IAuthRepository,
   customPresenceRepo?: IPresenceRepository,
-  customNetworkProvider?: INetworkEvidenceProvider
+  customNetworkProvider?: INetworkEvidenceProvider,
+  customAdminRepo?: IAdminRepository
 ): Express {
   const app = express();
 
@@ -45,6 +54,12 @@ export function createApp(
   const challengeController = new ChallengeController(challengeService);
   const challengeRouter = createChallengeRouter(challengeController);
 
+  const adminRepo = customAdminRepo || new InMemoryAdminRepository();
+  const adminService = new AdminService(adminRepo, authRepo, presenceRepo);
+  const adminController = new AdminController(adminService);
+  const adminRouter = createAdminRouter(adminController);
+  const curfewPublicRouter = createCurfewPublicRouter(adminController);
+
   // Mount Auth routes (Support both /auth and /api/v1/auth)
   app.use('/auth', authRouter);
   app.use('/api/v1/auth', authRouter);
@@ -58,6 +73,14 @@ export function createApp(
   app.use('/api/v1/verification/challenge', challengeRouter);
   app.use('/challenge', challengeRouter);
   app.use('/api/v1/challenge', challengeRouter);
+
+  // Mount Admin / Warden routes
+  app.use('/admin', adminRouter);
+  app.use('/api/v1/admin', adminRouter);
+
+  // Mount Curfew routes
+  app.use('/curfew', curfewPublicRouter);
+  app.use('/api/v1/curfew', curfewPublicRouter);
 
   // Root Endpoint - Interactive Developer Landing & API Status
   app.get('/', (req: Request, res: Response) => {

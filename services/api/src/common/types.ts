@@ -127,3 +127,82 @@ export interface IdempotencyRecord {
   statusCode: number;
   createdAt: Date;
 }
+
+export type LeaveType = 'OUTPASS' | 'NIGHT_OUT' | 'EMERGENCY' | 'HOME_VISIT';
+export type LeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+
+export interface Hostel {
+  id: string;
+  name: string;
+  code: string;
+  address?: string | null;
+  totalCapacity: number;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Room {
+  id: string;
+  hostelId: string;
+  roomNumber: string;
+  floor: number;
+  capacity: number;
+  currentOccupancy: number;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CurfewRule {
+  id: string;
+  hostelId: string;
+  dayOfWeek: number | null; // 0=Sunday, 6=Saturday, null=Daily default
+  curfewTime: string; // e.g. "21:30:00"
+  gracePeriodMinutes: number;
+  isActive: boolean;
+  effectiveFrom: string; // YYYY-MM-DD
+  effectiveTo?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface LeaveRequest {
+  id: string;
+  residentId: string;
+  leaveType: LeaveType;
+  startTime: Date;
+  endTime: Date;
+  reason: string;
+  status: LeaveStatus;
+  approverId?: string | null;
+  decisionReason?: string | null;
+  decisionTimestamp?: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface AuditLog {
+  id: string;
+  actorId?: string | null;
+  actorRole: string;
+  action: string;
+  targetEntity: string;
+  targetId: string;
+  previousState?: Record<string, unknown> | null;
+  newState?: Record<string, unknown> | null;
+  reason: string;
+  ipAddress?: string | null;
+  timestamp: Date;
+}
+
+export interface AdminAction {
+  id: string;
+  adminId: string;
+  actionType: string;
+  targetId: string;
+  details: Record<string, unknown>;
+  justification: string;
+  createdAt: Date;
+}
+
