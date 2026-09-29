@@ -73,7 +73,19 @@ export class InMemoryAuthRepository implements IAuthRepository {
       updatedAt: new Date(),
     });
 
-    // 4. Resident Rohan (Pending Activation, Activation Token: 'ACTIVATE_ROHAN_2026_TOKEN')
+    // 4. Resident Diya (Password: 'ResidentDiyaPass!2026')
+    this.users.set('c0000000-0000-0000-0000-000000000004', {
+      id: 'c0000000-0000-0000-0000-000000000004',
+      name: 'Diya Sharma',
+      email: 'diya.sharma@student.edu',
+      role: 'RESIDENT',
+      passwordHash: '$2a$12$K1d0F11m1j4aXkE3sI6/6u5k2n1eQ4A8M3cW6rP9yL0zD5xV2j1K6',
+      status: 'ACTIVE',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    // 5. Resident Rohan (Pending Activation, Activation Token: 'ACTIVATE_ROHAN_2026_TOKEN')
     this.users.set('c0000000-0000-0000-0000-000000000005', {
       id: 'c0000000-0000-0000-0000-000000000005',
       name: 'Rohan Verma',
@@ -99,6 +111,18 @@ export class InMemoryAuthRepository implements IAuthRepository {
       updatedAt: new Date(),
     });
 
+    this.residents.set('d0000000-0000-0000-0000-000000000002', {
+      id: 'd0000000-0000-0000-0000-000000000002',
+      userId: 'c0000000-0000-0000-0000-000000000004',
+      rollNumber: 'CS2026-002',
+      hostelId: 'a0000000-0000-0000-0000-000000000001',
+      roomId: 'b0000000-0000-0000-0000-000000000101',
+      emergencyContactName: 'Sunita Sharma',
+      emergencyContactPhone: '+919876543211',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
     this.residents.set('d0000000-0000-0000-0000-000000000003', {
       id: 'd0000000-0000-0000-0000-000000000003',
       userId: 'c0000000-0000-0000-0000-000000000005',
@@ -111,7 +135,7 @@ export class InMemoryAuthRepository implements IAuthRepository {
       updatedAt: new Date(),
     });
 
-    // Devices (Aarav has 1 ACTIVE device)
+    // Devices (Aarav has Active Android, Diya has Active iOS)
     this.devices.set('e0000000-0000-0000-0000-000000000001', {
       id: 'e0000000-0000-0000-0000-000000000001',
       residentId: 'd0000000-0000-0000-0000-000000000001',
@@ -121,7 +145,19 @@ export class InMemoryAuthRepository implements IAuthRepository {
       osVersion: '14.0',
       status: 'ACTIVE',
       registeredAt: new Date(),
-      approvedBy: 'c0000000-0000-0000-0000-000000000001',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    this.devices.set('e0000000-0000-0000-0000-000000000003', {
+      id: 'e0000000-0000-0000-0000-000000000003',
+      residentId: 'd0000000-0000-0000-0000-000000000002',
+      deviceIdentifier: 'DEV-FINGERPRINT-DIYA-IPHONE15',
+      deviceModel: 'Apple iPhone 15',
+      osName: 'IOS',
+      osVersion: '17.5',
+      status: 'ACTIVE',
+      registeredAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
     });

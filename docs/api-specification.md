@@ -56,6 +56,13 @@ sequenceDiagram
 | `POST /auth/logout` | Public (Requires Refresh Token) | Revokes active session |
 | `POST /auth/activate` | Public (Requires pre-provisioned activation token) | For new student onboarding |
 | `POST /auth/device/register`| `RESIDENT` | Binds hardware device to student profile |
+| `POST /presence/entry/start`| `RESIDENT` | Initiates entry check-in, issues challenge nonce |
+| `POST /presence/entry/verify`| `RESIDENT` | Verifies multi-factor evidence & completes entry |
+| `POST /presence/exit` | `RESIDENT` | Records resident exit |
+| `GET /presence/me` | `RESIDENT` | Current presence status & recent events |
+| `GET /presence/status` | `RESIDENT`, `WARDEN`, `ADMIN` | Presence roster / summary view |
+| `POST /verification/challenge/generate` | `RESIDENT` | Rate-limited (10 req/min), 32-byte nonce, 60s TTL |
+| `POST /verification/challenge/verify` | `RESIDENT` | Rate-limited (15 req/min), anti-replay, single-use |
 | `GET /resident/*` | `RESIDENT` | Resident curfew status & challenges |
 | `GET /warden/*` | `WARDEN`, `ADMIN`, `SUPER_ADMIN` | Curfew rosters, alerts, exceptions |
 | `GET /admin/*` | `ADMIN`, `SUPER_ADMIN` | Global hostel configs, audit ledgers |
@@ -456,4 +463,126 @@ Warden/Admin administrative overview or single-resident presence lookup.
   }
 }
 ```
+
+---
+
+## 6. Short-Lived Verification Challenge & Anti-Replay Endpoints
+
+To defeat replay attacks, clock manipulation, and off-campus proxy submissions, presence verification uses an ephemeral cryptographic challenge-response protocol. The backend issues a unique, high-entropy 32-byte hexadecimal nonce with a bounded server-authoritative time-to-live (TTL, default 60 seconds). All timing and validity decisions are enforced strictly by the server.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Resident as Resident (Mobile App)
+    participant API as Backend Challenge Engine
+    participant Store as Verification Attempts Store
+
+    Note over Resident,Store: 1. Challenge Generation Phase
+    Resident->>API: POST /verification/challenge/generate (Bearer Token, optional deviceId, ttlSeconds)
+    API->>API: Rate limit check (10 req/min per IP)
+    API->>API: Generate 32-byte crypto nonce & server-authoritative expiresAt
+    API->>Store: Store SHA-256(nonce), residentId, deviceId, status=PENDING
+    API-->>Resident: 201 Created (challengeId, nonce, issuedAt, expiresAt, ttlSeconds)
+
+    Note over Resident,Store: 2. Local Evidence Gathering (Biometrics & Subnet)
+    Resident->>Resident: Authenticate local biometrics & collect network socket
+
+    Note over Resident,Store: 3. Challenge Verification & Response Phase
+    Resident->>API: POST /verification/challenge/verify (challengeId, nonceProof, Idempotency-Key)
+    API->>API: Rate limit check (15 req/min per IP)
+    API->>Store: Fetch challenge record by challengeId
+    API->>API: Verify residentId matches authenticated token (Wrong-User Defense)
+    API->>API: Check if already consumed (Anti-Replay Defense -> 401 CHALLENGE_ALREADY_USED)
+    API->>API: Check server clock against expiresAt (Server Expiry -> 400 CHALLENGE_EXPIRED)
+    API->>API: Constant-time verify SHA-256(nonceProof) === stored hash
+    API->>Store: Atomically mark status=VERIFIED, consumedAt=serverTimestamp
+    API-->>Resident: 200 OK (verified: true, challengeId, consumedAt, serverTimestamp)
+```
+
+### 6.1 `POST /verification/challenge/generate`
+Generates a short-lived random verification challenge bound to the authenticated resident.
+
+- **Permitted Roles**: `RESIDENT`
+- **Rate Limit**: 10 requests / minute sliding window per IP
+- **Aliases**: `POST /challenge/generate`, `POST /api/v1/verification/challenge/generate`, `POST /api/v1/challenge/generate`
+- **Headers**:
+  - `Authorization: Bearer <accessToken>` (Required)
+  - `Content-Type: application/json`
+
+**Request Body (Optional):**
+```json
+{
+  "deviceId": "e0000000-0000-0000-0000-000000000001",
+  "ttlSeconds": 60
+}
+```
+*Note: `ttlSeconds` is constrained server-side to `10 <= ttlSeconds <= 300`. Defaults to 60 seconds.*
+
+**Success Response (201 Created):**
+```json
+{
+  "data": {
+    "challengeId": "c1a2b3c4-0000-0000-0000-000000000001",
+    "nonce": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
+    "issuedAt": "2026-09-29T15:00:00.000Z",
+    "expiresAt": "2026-09-29T15:01:00.000Z",
+    "ttlSeconds": 60
+  },
+  "message": "Verification challenge generated successfully"
+}
+```
+
+---
+
+### 6.2 `POST /verification/challenge/verify`
+Submits a cryptographic challenge proof for verification and atomic consumption.
+
+- **Permitted Roles**: `RESIDENT`
+- **Rate Limit**: 15 requests / minute sliding window per IP
+- **Aliases**: `POST /challenge/verify`, `POST /verification/challenge/respond`, `POST /api/v1/verification/challenge/verify`
+- **Headers**:
+  - `Authorization: Bearer <accessToken>` (Required)
+  - `Idempotency-Key: <unique-client-uuid>` (Optional, protects against repeated requests on dropped network connections)
+  - `Content-Type: application/json`
+
+**Request Body:**
+```json
+{
+  "challengeId": "c1a2b3c4-0000-0000-0000-000000000001",
+  "nonceProof": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
+  "evidence": {
+    "biometricConfirmed": true
+  }
+}
+```
+*Note: Accepts either `nonceProof` or `nonce` in the payload.*
+
+**Success Response (200 OK):**
+```json
+{
+  "data": {
+    "verified": true,
+    "challengeId": "c1a2b3c4-0000-0000-0000-000000000001",
+    "residentId": "d0000000-0000-0000-0000-000000000001",
+    "consumedAt": "2026-09-29T15:00:15.123Z",
+    "serverTimestamp": "2026-09-29T15:00:15.123Z"
+  },
+  "message": "Challenge verified and consumed successfully"
+}
+```
+
+---
+
+### 6.3 Security Invariants & Error Codes
+
+| HTTP Status | Error Code | Trigger Condition & Mitigation |
+| :--- | :--- | :--- |
+| `400 Bad Request` | `CHALLENGE_EXPIRED` | Current server time exceeds `expiresAt`. Client clocks are ignored; client cannot backdate expiration. |
+| `401 Unauthorized` | `CHALLENGE_ALREADY_USED` | Replay attack defense. Challenge was already consumed (`consumedAt !== null` or `status !== 'PENDING'`). |
+| `401 Unauthorized` | `INVALID_CHALLENGE_PROOF` | Submitted nonce proof does not match stored SHA-256 hash. |
+| `403 Forbidden` | `WRONG_USER_CHALLENGE` | Challenge was issued to resident A, but submitted by resident B. Prevents session theft. |
+| `404 Not Found` | `CHALLENGE_NOT_FOUND` | No challenge exists matching the supplied `challengeId`. |
+| `409 Conflict` | `DUPLICATE_CHALLENGE_SUBMISSION` | Duplicate attempt submitted without matching idempotency key. |
+| `429 Too Many Requests` | `TOO_MANY_REQUESTS` | Rate limit exceeded (10 req/min for generate, 15 req/min for verify). `Retry-After` header returned. |
+
 

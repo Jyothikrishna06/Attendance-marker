@@ -9,6 +9,9 @@ import { InMemoryPresenceRepository, IPresenceRepository } from './modules/prese
 import { PresenceService } from './modules/presence/presence.service.js';
 import { PresenceController } from './modules/presence/presence.controller.js';
 import { createPresenceRouter } from './modules/presence/presence.routes.js';
+import { ChallengeService } from './modules/challenge/challenge.service.js';
+import { ChallengeController } from './modules/challenge/challenge.controller.js';
+import { createChallengeRouter } from './modules/challenge/challenge.routes.js';
 import { MockNetworkProvider, INetworkEvidenceProvider } from './modules/network/index.js';
 import { authenticate } from './common/middleware/auth.middleware.js';
 import { requireRoles } from './common/middleware/rbac.middleware.js';
@@ -38,6 +41,10 @@ export function createApp(
   const presenceController = new PresenceController(presenceService);
   const presenceRouter = createPresenceRouter(presenceController);
 
+  const challengeService = new ChallengeService(presenceRepo, authRepo);
+  const challengeController = new ChallengeController(challengeService);
+  const challengeRouter = createChallengeRouter(challengeController);
+
   // Mount Auth routes (Support both /auth and /api/v1/auth)
   app.use('/auth', authRouter);
   app.use('/api/v1/auth', authRouter);
@@ -45,6 +52,12 @@ export function createApp(
   // Mount Presence routes
   app.use('/presence', presenceRouter);
   app.use('/api/v1/presence', presenceRouter);
+
+  // Mount Verification Challenge routes
+  app.use('/verification/challenge', challengeRouter);
+  app.use('/api/v1/verification/challenge', challengeRouter);
+  app.use('/challenge', challengeRouter);
+  app.use('/api/v1/challenge', challengeRouter);
 
   // Root Endpoint - Interactive Developer Landing & API Status
   app.get('/', (req: Request, res: Response) => {

@@ -21,6 +21,8 @@ graph TD
     Attack4["4. Device Clock Rollback"] -->|Mitigation| C4["Authoritative Server Timestamps (UTC)"]
     Attack5["5. Proxy Attendance / Roommate Verification"] -->|Mitigation| C5["Single Active Device Binding + Biometric Prompt"]
     Attack6["6. Institutional Gateway Forgery"] -->|Mitigation| C6["Shared Secret / Gateway HMAC Verification"]
+    Attack7["7. Cross-User Challenge Theft"] -->|Mitigation| C7["Strict Resident ID Token Binding (403 WRONG_USER)"]
+    Attack8["8. Nonce Flooding & DoS"] -->|Mitigation| C8["Sliding-Window Rate Limiting (10-15 req/min)"]
 ```
 
 ---
@@ -95,6 +97,27 @@ graph TD
 
 ---
 
+#### Threat 8: Nonce Guessing, Tampering & Challenge Flooding (Denial of Service)
+- **Attack Vector**: An attacker attempts to guess valid challenge nonces via brute-force or floods `POST /verification/challenge/generate` to exhaust backend memory and database connection pools.
+- **Severity**: High.
+- **Architectural Countermeasure**:
+  - **High Entropy**: Nonces are generated using Node.js `crypto.randomBytes(32)` yielding 256 bits of cryptographically secure entropy ($2^{256}$ search space), making brute-force computation completely infeasible.
+  - **SHA-256 Storage**: Raw nonces are never stored plaintext; they are hashed via SHA-256 prior to insertion in `verification_attempts`.
+  - **Multi-Tier Rate Limiting**: In-memory sliding-window rate limiters restrict challenge generation to **10 requests/min** and verification to **15 requests/min** per IP address. Exceeded limits return HTTP 429 `TOO_MANY_REQUESTS` with `Retry-After`.
+  - **Ephemeral TTL & Auto-Expiration**: Default 60-second lifetime ensures stale nonces are purged and become unconsumable immediately.
+
+---
+
+#### Threat 9: Cross-User Challenge Theft (Wrong-User Injection)
+- **Attack Vector**: Student B intercepts or observes Student A's active challenge ID (e.g., via proxy logs or shoulder surfing) and attempts to submit their own presence verification using Student A's challenge nonce.
+- **Severity**: High.
+- **Architectural Countermeasure**:
+  - **Strict Resident-Challenge Association**: Every generated challenge is irrevocably tied to the authenticated resident's `residentId` at creation time.
+  - **Identity Mismatch Rejection**: During verification, the backend asserts `challenge.residentId === req.user.residentId`. If a mismatch is detected, the request is rejected immediately with HTTP 403 `WRONG_USER_CHALLENGE`.
+  - **Non-Destructive Failure**: The target resident's challenge remains in `PENDING` status and is not consumed by the attacker's unauthorized attempt, protecting the legitimate user from denial of service.
+
+---
+
 ### 3. Residual Risks & Operational Compensating Controls
 
 | Residual Risk | Likelihood | Impact | Compensating Operational Control |
@@ -102,3 +125,6 @@ graph TD
 | **Device left in hostel room with shared passcode** | Low | Medium | Multi-factor correlation: warden nightly floor inspections cross-referenced with presence roster. |
 | **Wi-Fi bleed outside hostel boundary** | Medium | Low | Fine-tuned Wi-Fi AP transmission power (Tx power calibration) to restrict coverage to building perimeter; physical hostel entry turnstiles. |
 | **Campus Wi-Fi hardware failure during curfew** | Low | High | Automated warden fallback mode allowing Warden Manual Verification (`WARDEN_MANUAL`) with mandatory reason logging in `audit_logs`. |
+| **Replay of historical verification packet** | Low | Critical | Ephemeral 32-byte nonces (60s TTL), SHA-256 one-time hashing, atomic consumption on first use. |
+| **Cross-user challenge hijacking** | Low | High | Strict cryptographic token-to-residentId foreign key binding; HTTP 403 `WRONG_USER_CHALLENGE`. |
+

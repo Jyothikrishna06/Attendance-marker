@@ -8,6 +8,7 @@ import {
   NotFoundError,
   ConflictError,
   ValidationError,
+  ChallengeExpiredError,
 } from '../../common/errors.js';
 import { AccessTokenPayload, PresenceEvent } from '../../common/types.js';
 
@@ -142,7 +143,10 @@ export class PresenceService {
 
     // 2. Security Check: Session ownership
     if (attempt.residentId !== resident.id) {
-      throw new ForbiddenError('Verification session was issued to a different resident.');
+      throw new ForbiddenError(
+        'Wrong user attempt: Verification session was issued to a different resident.',
+        'WRONG_USER_CHALLENGE'
+      );
     }
 
     // 3. Security Check: Single-use anti-replay (already consumed)
@@ -160,7 +164,7 @@ export class PresenceService {
         status: 'EXPIRED',
         failureReason: 'CHALLENGE_TIMEOUT',
       });
-      throw new ValidationError(
+      throw new ChallengeExpiredError(
         'Verification challenge expired. Please initiate a fresh verification attempt.',
         { challengeExpiresAt: attempt.challengeExpiresAt.toISOString(), serverTime: now.toISOString() }
       );

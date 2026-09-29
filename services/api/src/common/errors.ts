@@ -19,6 +19,15 @@ export class ValidationError extends AppError {
   }
 }
 
+export class ChallengeExpiredError extends AppError {
+  constructor(
+    message = 'Verification challenge expired. Please initiate a fresh verification attempt.',
+    details?: unknown
+  ) {
+    super(message, 400, 'CHALLENGE_EXPIRED', details);
+  }
+}
+
 export class UnauthorizedError extends AppError {
   constructor(message = 'Authentication required or invalid credentials', code = 'UNAUTHORIZED', details?: unknown) {
     super(message, 401, code, details);
