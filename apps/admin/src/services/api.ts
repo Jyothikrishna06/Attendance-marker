@@ -8,7 +8,7 @@ import {
   ResidentStatus,
 } from '../types/index.js';
 
-const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3000';
+const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:4000';
 
 class ApiService {
   private token: string | null = null;
@@ -157,6 +157,42 @@ class ApiService {
   async getAuditLogs(entity?: string): Promise<AuditLogItem[]> {
     const q = entity && entity !== 'ALL' ? `?targetEntity=${encodeURIComponent(entity)}` : '';
     const res = await this.request<{ data: AuditLogItem[] }>(`/admin/audit${q}`);
+    return res.data;
+  }
+
+  // 8. Resident Presence Operations
+  async getMyPresenceStatus() {
+    const res = await this.request<{ data: any }>('/presence/me');
+    return res.data;
+  }
+
+  async generateChallenge() {
+    const res = await this.request<{
+      data: { challengeId: string; challengeNonce: string; expiresAt: string; ttlSeconds: number };
+    }>('/verification/challenge/generate', {
+      method: 'POST',
+      body: JSON.stringify({ clientMetadata: { platform: 'WEB_PORTAL' } }),
+    });
+    return res.data;
+  }
+
+  async verifyPresence(challengeId: string, challengeNonce: string, biometricConfirmed = true) {
+    const res = await this.request<{ data: any }>('/presence/entry/verify', {
+      method: 'POST',
+      body: JSON.stringify({
+        challengeId,
+        challengeNonce,
+        biometricConfirmed,
+      }),
+    });
+    return res.data;
+  }
+
+  async exitPresence() {
+    const res = await this.request<{ data: any }>('/presence/exit', {
+      method: 'POST',
+      body: JSON.stringify({ reason: 'Student marked exit via web portal' }),
+    });
     return res.data;
   }
 }

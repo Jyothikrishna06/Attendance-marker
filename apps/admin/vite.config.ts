@@ -6,10 +6,11 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/auth': 'http://localhost:3000',
-      '/admin': 'http://localhost:3000',
-      '/curfew': 'http://localhost:3000',
-      '/presence': 'http://localhost:3000',
+      '/auth': 'http://localhost:4000',
+      '/admin': 'http://localhost:4000',
+      '/curfew': 'http://localhost:4000',
+      '/presence': 'http://localhost:4000',
+      '/verification': 'http://localhost:4000',
     },
   },
 });

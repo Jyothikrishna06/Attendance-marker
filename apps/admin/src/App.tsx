@@ -21,6 +21,7 @@ import { CurfewRosterTable } from './components/CurfewRosterTable.js';
 import { RecordCorrectionModal } from './components/RecordCorrectionModal.js';
 import { LeaveApprovalQueue } from './components/LeaveApprovalQueue.js';
 import { AuditLogViewer } from './components/AuditLogViewer.js';
+import { ResidentPortalView } from './components/ResidentPortalView.js';
 
 export const App: React.FC = () => {
   // Authentication & Session (starts completely null, zero fake defaults)
@@ -66,7 +67,7 @@ export const App: React.FC = () => {
     setTimeout(() => setNotification(null), 4000);
   };
 
-  // Authentic Staff Login
+  // Authentic Login (Supports Resident Students and Staff)
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginEmail.trim() || !loginPassword) {
@@ -77,13 +78,6 @@ export const App: React.FC = () => {
       setLoading(true);
       setLoginError(null);
       const authData = await api.login(loginEmail.trim(), loginPassword);
-      if (
-        authData.user.role !== 'WARDEN' &&
-        authData.user.role !== 'ADMIN' &&
-        authData.user.role !== 'SUPER_ADMIN'
-      ) {
-        throw new Error('Access denied: Staff credentials required to access the Warden Operations Console.');
-      }
       setSession({
         userId: authData.user.id,
         name: authData.user.name,
@@ -154,7 +148,11 @@ export const App: React.FC = () => {
   const refreshAll = useCallback(async () => {
     if (!session) return;
     setLoading(true);
-    await Promise.all([loadCurfewPolicy(), loadStatusRoster(), loadLeaves(), loadAuditLogs()]);
+    if (session.role === 'RESIDENT') {
+      await loadCurfewPolicy();
+    } else {
+      await Promise.all([loadCurfewPolicy(), loadStatusRoster(), loadLeaves(), loadAuditLogs()]);
+    }
     setLoading(false);
   }, [session, loadCurfewPolicy, loadStatusRoster, loadLeaves, loadAuditLogs]);
 
@@ -250,7 +248,7 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* Unauthenticated State: Clean Staff Login Form */}
+      {/* Unauthenticated State: Clean Portal Login Form */}
       {!session ? (
         <main
           className="main-content"
@@ -275,10 +273,10 @@ export const App: React.FC = () => {
             <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
               <div style={{ fontSize: '2.75rem', marginBottom: '0.5rem' }}>🏛️</div>
               <h2 style={{ fontSize: '1.45rem', fontWeight: 700, color: 'var(--text-main)' }}>
-                Staff Portal Login
+                Hostel Curfew & Presence Portal
               </h2>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.35rem' }}>
-                Warden, Administrator & Security Operations
+                Sign in with your registered student or staff email
               </p>
             </div>
 
@@ -306,14 +304,14 @@ export const App: React.FC = () => {
                     marginBottom: '0.4rem',
                     color: 'var(--text-main)',
                   }}
-                  htmlFor="staff-email"
+                  htmlFor="portal-email"
                 >
                   Institutional Email
                 </label>
                 <input
-                  id="staff-email"
+                  id="portal-email"
                   type="email"
-                  placeholder="Enter staff email"
+                  placeholder="Enter email address"
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
                   style={{
@@ -339,12 +337,12 @@ export const App: React.FC = () => {
                     marginBottom: '0.4rem',
                     color: 'var(--text-main)',
                   }}
-                  htmlFor="staff-password"
+                  htmlFor="portal-password"
                 >
                   Password
                 </label>
                 <input
-                  id="staff-password"
+                  id="portal-password"
                   type="password"
                   placeholder="Enter password"
                   value={loginPassword}
@@ -374,12 +372,22 @@ export const App: React.FC = () => {
                 }}
                 disabled={loading}
               >
-                {loading ? 'Authenticating...' : 'Sign In to Operations Console'}
+                {loading ? 'Authenticating...' : 'Sign In to Portal'}
               </button>
             </form>
           </div>
         </main>
+      ) : session.role === 'RESIDENT' ? (
+        /* Resident Student Portal View */
+        <main className="main-content">
+          <ResidentPortalView
+            session={session}
+            curfewPolicy={curfewPolicy}
+            onNotification={showNotification}
+          />
+        </main>
       ) : (
+        /* Staff (Warden / Admin) Dashboard View */
         <>
           {/* Nav Tabs */}
           <nav className="nav-tabs">

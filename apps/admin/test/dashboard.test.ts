@@ -2,9 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ResidentStatusItem,
-  FilterState,
   CurrentCurfewPolicy,
-  LeaveRequest,
 } from '../src/types/index.js';
 
 describe('Admin & Warden Frontend Dashboard Unit & E2E Logic Suite', () => {
