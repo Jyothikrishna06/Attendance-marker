@@ -22,6 +22,10 @@ export interface IAuthRepository {
   findResidentById(id: string): Promise<ResidentProfile | null>;
   getAllResidents(): Promise<ResidentProfile[]>;
   getAllUsers(): Promise<User[]>;
+  getAllDevices(): Promise<Device[]>;
+  findDeviceById(id: string): Promise<Device | null>;
+  revokeDevice(deviceId: string): Promise<Device>;
+  updateUserStatus(userId: string, status: UserStatus): Promise<User>;
 }
 
 /**
@@ -280,5 +284,42 @@ export class InMemoryAuthRepository implements IAuthRepository {
 
   async getAllUsers(): Promise<User[]> {
     return Array.from(this.users.values());
+  }
+
+  async getAllDevices(): Promise<Device[]> {
+    return Array.from(this.devices.values());
+  }
+
+  async findDeviceById(id: string): Promise<Device | null> {
+    return this.devices.get(id) || null;
+  }
+
+  async revokeDevice(deviceId: string): Promise<Device> {
+    const dev = this.devices.get(deviceId);
+    if (!dev) {
+      throw new Error(`Device ${deviceId} not found`);
+    }
+    const updated: Device = {
+      ...dev,
+      status: 'REVOKED',
+      revokedAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.devices.set(deviceId, updated);
+    return updated;
+  }
+
+  async updateUserStatus(userId: string, status: UserStatus): Promise<User> {
+    const user = this.users.get(userId);
+    if (!user) {
+      throw new Error(`User ${userId} not found`);
+    }
+    const updated: User = {
+      ...user,
+      status,
+      updatedAt: new Date(),
+    };
+    this.users.set(userId, updated);
+    return updated;
   }
 }

@@ -39,6 +39,15 @@ export const correctRecordSchema = z.object({
   reason: z.string().min(1, { message: 'Mandatory non-empty justification reason is required to correct record' }),
 });
 
+export const updateUserStatusSchema = z.object({
+  status: z.enum(['PENDING_ACTIVATION', 'ACTIVE', 'SUSPENDED', 'DEACTIVATED']),
+  reason: z.string().min(1, { message: 'Mandatory non-empty justification reason is required' }),
+});
+
+export const revokeDeviceSchema = z.object({
+  reason: z.string().min(1, { message: 'Mandatory non-empty justification reason is required' }),
+});
+
 export class AdminController {
   constructor(private adminService: AdminService) {}
 
@@ -223,6 +232,57 @@ export class AdminController {
       res.status(200).json({
         data: logs,
         total: logs.length,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  /**
+   * PATCH /admin/users/:id/status
+   */
+  updateUserStatus = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.user) throw new UnauthorizedError();
+      const parseResult = updateUserStatusSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        throw new ValidationError('Invalid status update payload', parseResult.error.flatten().fieldErrors);
+      }
+      const updated = await this.adminService.updateUserStatus(
+        req.user,
+        req.params.id,
+        parseResult.data.status,
+        parseResult.data.reason,
+        req.ip
+      );
+      res.status(200).json({
+        data: updated,
+        message: `User status successfully updated to ${updated.status}`,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  /**
+   * POST /admin/devices/:id/revoke
+   */
+  revokeDevice = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.user) throw new UnauthorizedError();
+      const parseResult = revokeDeviceSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        throw new ValidationError('Invalid device revocation payload', parseResult.error.flatten().fieldErrors);
+      }
+      const updated = await this.adminService.revokeDevice(
+        req.user,
+        req.params.id,
+        parseResult.data.reason,
+        req.ip
+      );
+      res.status(200).json({
+        data: updated,
+        message: 'Device revoked successfully with immutable audit log committed',
       });
     } catch (err) {
       next(err);

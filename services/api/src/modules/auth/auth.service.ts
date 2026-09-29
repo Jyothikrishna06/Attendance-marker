@@ -5,9 +5,13 @@ import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../cor
 import { UnauthorizedError, ForbiddenError, NotFoundError } from '../../common/errors.js';
 import { AuthResponse, Device } from '../../common/types.js';
 import { env } from '../../config/env.js';
+import { IAuditService } from '../audit/audit.service.js';
 
 export class AuthService {
-  constructor(private readonly authRepo: IAuthRepository) {}
+  constructor(
+    private readonly authRepo: IAuthRepository,
+    private readonly auditService?: IAuditService
+  ) {}
 
   /**
    * Authenticates a user using email & password credentials.
@@ -176,7 +180,12 @@ export class AuthService {
   /**
    * Activates a resident account that was pre-provisioned by administration.
    */
-  async activate(email: string, activationToken: string, newPasswordPlain: string): Promise<{ message: string }> {
+  async activate(
+    email: string,
+    activationToken: string,
+    newPasswordPlain: string,
+    ipAddress?: string
+  ): Promise<{ message: string }> {
     const user = await this.authRepo.findUserByEmail(email);
     if (!user) {
       throw new NotFoundError('No account found matching the provided email address');
@@ -193,6 +202,20 @@ export class AuthService {
     const hashedPassword = await hashPassword(newPasswordPlain);
     await this.authRepo.updateUserPasswordAndStatus(user.id, hashedPassword, 'ACTIVE');
 
+    if (this.auditService) {
+      await this.auditService.recordAuditEvent({
+        actorId: user.id,
+        actorRole: user.role,
+        action: 'ACCOUNT_ACTIVATED',
+        targetEntity: 'users',
+        targetId: user.id,
+        previousState: { status: 'PENDING_ACTIVATION' },
+        newState: { status: 'ACTIVE' },
+        reason: 'Resident completed self-service mobile activation with valid activation token',
+        ipAddress: ipAddress || null,
+      });
+    }
+
     return { message: 'Account successfully activated. You may now log in with your credentials.' };
   }
 
@@ -206,7 +229,8 @@ export class AuthService {
       deviceModel: string;
       osName: 'ANDROID' | 'IOS' | 'TEST_OS';
       osVersion: string;
-    }
+    },
+    ipAddress?: string
   ): Promise<Device> {
     const user = await this.authRepo.findUserById(userId);
     if (!user || user.role !== 'RESIDENT') {
@@ -218,12 +242,34 @@ export class AuthService {
       throw new NotFoundError('Resident profile not found for this account');
     }
 
-    return this.authRepo.registerDevice({
+    const device = await this.authRepo.registerDevice({
       residentId: resident.id,
       deviceIdentifier: data.deviceIdentifier,
       deviceModel: data.deviceModel,
       osName: data.osName,
       osVersion: data.osVersion,
     });
+
+    if (this.auditService) {
+      await this.auditService.recordAuditEvent({
+        actorId: userId,
+        actorRole: 'RESIDENT',
+        action: 'DEVICE_REGISTERED',
+        targetEntity: 'devices',
+        targetId: device.id,
+        previousState: null,
+        newState: {
+          deviceIdentifier: device.deviceIdentifier,
+          deviceModel: device.deviceModel,
+          osName: device.osName,
+          osVersion: device.osVersion,
+          status: device.status,
+        },
+        reason: 'Resident bound new mobile device to account',
+        ipAddress: ipAddress || null,
+      });
+    }
+
+    return device;
   }
 }

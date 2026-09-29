@@ -21,18 +21,23 @@ import {
   CurfewRule,
   AuditLog,
   PresenceEvent,
+  User,
+  Device,
+  UserStatus,
 } from '../../common/types.js';
 import {
   NotFoundError,
   ValidationError,
   ForbiddenError,
 } from '../../common/errors.js';
+import { IAuditService } from '../audit/audit.service.js';
 
 export class AdminService {
   constructor(
     private adminRepo: IAdminRepository,
     private authRepo: IAuthRepository,
-    private presenceRepo: IPresenceRepository
+    private presenceRepo: IPresenceRepository,
+    private auditService?: IAuditService
   ) {}
 
   /**
@@ -396,7 +401,7 @@ export class AdminService {
     await this.adminRepo.createAuditLog({
       actorId: actor.userId,
       actorRole: actor.role,
-      action: `LEAVE_${input.status}`,
+      action: 'LEAVE_STATUS_UPDATED',
       targetEntity: 'leave_requests',
       targetId: id,
       previousState: previousState as unknown as Record<string, unknown>,
@@ -507,5 +512,133 @@ export class AdminService {
    */
   async getAuditLogs(filter: AuditLogFilter = {}): Promise<AuditLog[]> {
     return this.adminRepo.getAuditLogs(filter);
+  }
+
+  /**
+   * 9. PATCH /admin/users/:id/status
+   * Activate, suspend, or deactivate a user account with mandatory justification.
+   */
+  async updateUserStatus(
+    actor: AccessTokenPayload,
+    userId: string,
+    newStatus: UserStatus,
+    reason: string,
+    ipAddress?: string
+  ): Promise<User> {
+    if (!reason || !reason.trim()) {
+      throw new ValidationError(
+        'Mandatory non-empty justification reason is required to update account status.',
+        { field: 'reason', code: 'MANDATORY_REASON_REQUIRED' }
+      );
+    }
+
+    const trimmedReason = reason.trim();
+    const user = await this.authRepo.findUserById(userId);
+    if (!user) {
+      throw new NotFoundError(`User ${userId} not found`);
+    }
+
+    const previousStatus = user.status;
+    const updated = await this.authRepo.updateUserStatus(userId, newStatus);
+    const action = newStatus === 'DEACTIVATED' ? 'ACCOUNT_DEACTIVATED' : 'USER_STATUS_UPDATED';
+
+    if (this.auditService) {
+      await this.auditService.recordAuditEvent({
+        actorId: actor.userId,
+        actorRole: actor.role,
+        action,
+        targetEntity: 'users',
+        targetId: userId,
+        previousState: { status: previousStatus },
+        newState: { status: newStatus },
+        reason: trimmedReason,
+        ipAddress: ipAddress || null,
+      });
+    } else {
+      await this.adminRepo.createAuditLog({
+        actorId: actor.userId,
+        actorRole: actor.role,
+        action,
+        targetEntity: 'users',
+        targetId: userId,
+        previousState: { status: previousStatus },
+        newState: { status: newStatus },
+        reason: trimmedReason,
+        ipAddress: ipAddress || null,
+      });
+    }
+
+    await this.adminRepo.createAdminAction({
+      adminId: actor.userId,
+      actionType: 'USER_STATUS_CHANGE',
+      targetId: userId,
+      details: { previousStatus, newStatus },
+      justification: trimmedReason,
+    });
+
+    return updated;
+  }
+
+  /**
+   * 10. POST /admin/devices/:id/revoke
+   * Revoke a registered hardware device with mandatory justification reason.
+   */
+  async revokeDevice(
+    actor: AccessTokenPayload,
+    deviceId: string,
+    reason: string,
+    ipAddress?: string
+  ): Promise<Device> {
+    if (!reason || !reason.trim()) {
+      throw new ValidationError(
+        'Mandatory non-empty justification reason is required to revoke a device.',
+        { field: 'reason', code: 'MANDATORY_REASON_REQUIRED' }
+      );
+    }
+
+    const trimmedReason = reason.trim();
+    const device = await this.authRepo.findDeviceById(deviceId);
+    if (!device) {
+      throw new NotFoundError(`Device ${deviceId} not found`);
+    }
+
+    const previousStatus = device.status;
+    const updated = await this.authRepo.revokeDevice(deviceId);
+
+    if (this.auditService) {
+      await this.auditService.recordAuditEvent({
+        actorId: actor.userId,
+        actorRole: actor.role,
+        action: 'DEVICE_REVOKED',
+        targetEntity: 'devices',
+        targetId: deviceId,
+        previousState: { status: previousStatus, revokedAt: device.revokedAt },
+        newState: { status: 'REVOKED', revokedAt: updated.revokedAt },
+        reason: trimmedReason,
+        ipAddress: ipAddress || null,
+      });
+    } else {
+      await this.adminRepo.createAuditLog({
+        actorId: actor.userId,
+        actorRole: actor.role,
+        action: 'DEVICE_REVOKED',
+        targetEntity: 'devices',
+        targetId: deviceId,
+        previousState: { status: previousStatus, revokedAt: device.revokedAt },
+        newState: { status: 'REVOKED', revokedAt: updated.revokedAt },
+        reason: trimmedReason,
+        ipAddress: ipAddress || null,
+      });
+    }
+
+    await this.adminRepo.createAdminAction({
+      adminId: actor.userId,
+      actionType: 'DEVICE_REVOCATION',
+      targetId: deviceId,
+      details: { previousStatus, newStatus: 'REVOKED', deviceIdentifier: device.deviceIdentifier },
+      justification: trimmedReason,
+    });
+
+    return updated;
   }
 }

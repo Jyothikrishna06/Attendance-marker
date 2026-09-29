@@ -31,13 +31,24 @@ import {
   CurfewEvaluationService,
   CurfewEvaluationController,
 } from './modules/curfew-evaluation/index.js';
+import {
+  IAuditRepository,
+  InMemoryAuditRepository,
+  AuditService,
+} from './modules/audit/index.js';
+import {
+  ReportingService,
+  ReportingController,
+  createReportingRouter,
+} from './modules/reporting/index.js';
 
 export function createApp(
   customAuthRepo?: IAuthRepository,
   customPresenceRepo?: IPresenceRepository,
   customNetworkProvider?: INetworkEvidenceProvider,
   customAdminRepo?: IAdminRepository,
-  customCurfewEvalRepo?: ICurfewEvaluationRepository
+  customCurfewEvalRepo?: ICurfewEvaluationRepository,
+  customAuditRepo?: IAuditRepository
 ): Express {
   const app = express();
 
@@ -47,8 +58,11 @@ export function createApp(
   app.use(express.urlencoded({ extended: true }));
 
   // Dependency Injection
+  const auditRepo = customAuditRepo || new InMemoryAuditRepository();
+  const auditService = new AuditService(auditRepo);
+
   const authRepo = customAuthRepo || new InMemoryAuthRepository();
-  const authService = new AuthService(authRepo);
+  const authService = new AuthService(authRepo, auditService);
   const authController = new AuthController(authService);
   const authRouter = createAuthRouter(authController);
 
@@ -62,8 +76,8 @@ export function createApp(
   const challengeController = new ChallengeController(challengeService);
   const challengeRouter = createChallengeRouter(challengeController);
 
-  const adminRepo = customAdminRepo || new InMemoryAdminRepository();
-  const adminService = new AdminService(adminRepo, authRepo, presenceRepo);
+  const adminRepo = customAdminRepo || new InMemoryAdminRepository(auditRepo);
+  const adminService = new AdminService(adminRepo, authRepo, presenceRepo, auditService);
   const adminController = new AdminController(adminService);
 
   const curfewEvalRepo = customCurfewEvalRepo || new InMemoryCurfewEvaluationRepository();
@@ -77,6 +91,16 @@ export function createApp(
 
   const adminRouter = createAdminRouter(adminController, curfewEvalController);
   const curfewPublicRouter = createCurfewPublicRouter(adminController);
+
+  const reportingService = new ReportingService(
+    adminRepo,
+    authRepo,
+    presenceRepo,
+    curfewEvalRepo,
+    auditRepo
+  );
+  const reportingController = new ReportingController(reportingService);
+  const reportingRouter = createReportingRouter(reportingController);
 
   // Mount Auth routes (Support both /auth and /api/v1/auth)
   app.use('/auth', authRouter);
@@ -95,6 +119,12 @@ export function createApp(
   // Mount Admin / Warden routes
   app.use('/admin', adminRouter);
   app.use('/api/v1/admin', adminRouter);
+
+  // Mount Executive & Audit Reporting routes
+  app.use('/admin/reports', reportingRouter);
+  app.use('/api/v1/admin/reports', reportingRouter);
+  app.use('/reports', reportingRouter);
+  app.use('/api/v1/reports', reportingRouter);
 
   // Mount Curfew routes
   app.use('/curfew', curfewPublicRouter);

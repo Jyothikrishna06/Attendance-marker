@@ -39,6 +39,13 @@ export function createAdminRouter(
   // Audit Logs
   router.get('/audit', adminGuard, controller.getAuditLogs);
 
+  // User Account Administration
+  router.patch('/users/:id/status', adminGuard, controller.updateUserStatus);
+  router.post('/users/:id/status', adminGuard, controller.updateUserStatus);
+
+  // Device Administration
+  router.post('/devices/:id/revoke', adminGuard, controller.revokeDevice);
+
   return router;
 }
 

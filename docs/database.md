@@ -273,20 +273,28 @@ Immutable, append-only ledger of security-critical actions and state transitions
 | `ip_address` | `VARCHAR(45)` | `NULLABLE` | Originating IP address (IPv4 or IPv6). |
 | `timestamp` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Authoritative log timestamp. |
 
+*Database Immutability Constraints & Triggers:*
+- `trg_audit_logs_immutability`: BEFORE UPDATE OR DELETE trigger executing `prevent_audit_log_modification()`, which raises SQLSTATE `55000` to prevent any modification or deletion.
+- Role-level permissions: `REVOKE UPDATE, DELETE ON audit_logs FROM PUBLIC, app_user, resident_role, warden_role;`.
+
 ---
 
 ### 3.13 `admin_actions`
-High-level administrative governance decisions (e.g., curfew policy changes, bulk overrides).
+High-level administrative governance decisions (e.g., curfew policy changes, bulk overrides, user status alterations, device revocations).
 
 | Column | Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
 | `id` | `UUID` | `PRIMARY KEY, DEFAULT gen_random_uuid()` | Action record ID. |
 | `admin_id` | `UUID` | `NOT NULL, FK -> users(id) ON DELETE RESTRICT` | Administrator performing action. |
-| `action_type` | `admin_action_type` | `NOT NULL` | Enum: `'CURFEW_RULE_CHANGE'`, `'BULK_STATUS_OVERRIDE'`, etc. |
+| `action_type` | `admin_action_type` | `NOT NULL` | Enum: `'CURFEW_RULE_CHANGE'`, `'BULK_STATUS_OVERRIDE'`, `'USER_STATUS_CHANGE'`, `'DEVICE_REVOCATION'`, etc. |
 | `target_id` | `VARCHAR(255)`| `NOT NULL` | Target subject identifier. |
 | `details` | `JSONB` | `NOT NULL, DEFAULT '{}'` | Parameter payload. |
 | `justification`| `TEXT` | `NOT NULL, CHECK (char_length(trim(justification)) > 0)` | Mandatory institutional reason. |
 | `created_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT CURRENT_TIMESTAMP` | Execution timestamp. |
+
+*Database Immutability Constraints & Triggers:*
+- `trg_admin_actions_immutability`: BEFORE UPDATE OR DELETE trigger executing `prevent_audit_log_modification()` ensuring governance records cannot be modified or purged.
+- Role-level permissions: `REVOKE UPDATE, DELETE ON admin_actions FROM PUBLIC, app_user, resident_role, warden_role;`.
 
 ---
 
@@ -310,10 +318,13 @@ High-level administrative governance decisions (e.g., curfew policy changes, bul
 
 ### Step 1: Sequential Migration Execution (PostgreSQL)
 ```bash
+# Execute schema migrations 001 through 009 in strict order:
 psql -U postgres -d hostel_curfew -f database/migrations/001_initial_schema.sql
+psql -U postgres -d hostel_curfew -f database/migrations/009_enforce_audit_immutability.sql
 ```
 
 ### Step 2: Ingest Development Seed Data
 ```bash
 psql -U postgres -d hostel_curfew -f database/seeds/001_development_seed.sql
 ```
+

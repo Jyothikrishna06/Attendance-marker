@@ -9,6 +9,7 @@ import {
   LeaveStatus,
 } from '../../common/types.js';
 import { LeaveRequestFilter, AuditLogFilter } from './admin.interface.js';
+import { IAuditRepository } from '../audit/audit.repository.js';
 
 export interface IAdminRepository {
   getHostels(): Promise<Hostel[]>;
@@ -46,7 +47,7 @@ export class InMemoryAdminRepository implements IAdminRepository {
   private auditLogs: AuditLog[] = [];
   private adminActions: AdminAction[] = [];
 
-  constructor() {
+  constructor(private auditRepo?: IAuditRepository) {
     this.seedInitialData();
   }
 
@@ -331,6 +332,9 @@ export class InMemoryAdminRepository implements IAdminRepository {
   }
 
   async createAuditLog(log: Omit<AuditLog, 'id' | 'timestamp'>): Promise<AuditLog> {
+    if (this.auditRepo) {
+      return this.auditRepo.createAuditLog(log);
+    }
     const newLog: AuditLog = {
       id: crypto.randomUUID(),
       ...log,
@@ -341,6 +345,9 @@ export class InMemoryAdminRepository implements IAdminRepository {
   }
 
   async getAuditLogs(filter?: AuditLogFilter): Promise<AuditLog[]> {
+    if (this.auditRepo) {
+      return this.auditRepo.getAuditLogs(filter);
+    }
     let logs = [...this.auditLogs];
     if (filter?.targetEntity) {
       logs = logs.filter((l) => l.targetEntity.toLowerCase() === filter.targetEntity!.toLowerCase());

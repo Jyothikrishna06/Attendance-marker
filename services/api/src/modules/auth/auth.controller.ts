@@ -74,7 +74,12 @@ export class AuthController {
   activate = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const data = activateSchema.parse(req.body);
-      const result = await this.authService.activate(data.email, data.activationToken, data.newPassword);
+      const result = await this.authService.activate(
+        data.email,
+        data.activationToken,
+        data.newPassword,
+        req.ip
+      );
       res.status(200).json({
         data: result,
       });
@@ -89,7 +94,7 @@ export class AuthController {
         throw new UnauthorizedError('Authentication required to register device');
       }
       const data = registerDeviceSchema.parse(req.body);
-      const device = await this.authService.registerDevice(req.user.userId, data);
+      const device = await this.authService.registerDevice(req.user.userId, data, req.ip);
       res.status(201).json({
         data: { device },
         message: 'Device registered successfully',
