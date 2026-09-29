@@ -52,6 +52,9 @@ export function createApp(
 ): Express {
   const app = express();
 
+  // Reverse proxy IP resolution
+  app.set('trust proxy', 1);
+
   // Basic Middlewares
   app.use(cors({ origin: env.CORS_ORIGIN }));
   app.use(express.json());

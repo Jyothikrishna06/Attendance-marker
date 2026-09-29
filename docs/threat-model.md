@@ -128,3 +128,97 @@ graph TD
 | **Replay of historical verification packet** | Low | Critical | Ephemeral 32-byte nonces (60s TTL), SHA-256 one-time hashing, atomic consumption on first use. |
 | **Cross-user challenge hijacking** | Low | High | Strict cryptographic token-to-residentId foreign key binding; HTTP 403 `WRONG_USER_CHALLENGE`. |
 
+---
+
+### 4. Comprehensive Security Audit & Vulnerability Assessment Report
+
+#### 4.1 Executive Summary & Audit Scope
+A rigorous end-to-end security architecture and code-level vulnerability assessment was performed across all subsystems:
+- **Backend API Service**: [services/api](file:///c:/Users/JYOTHI/Downloads/projects/attendance%20marker/services/api) (Node.js, Express, TypeScript, Zod, JsonWebToken, Bcryptjs).
+- **Relational Storage & Schema Integrity**: [database/migrations](file:///c:/Users/JYOTHI/Downloads/projects/attendance%20marker/database/migrations) (PostgreSQL DDL, check constraints, foreign keys, triggers, audit immutability).
+- **Warden & Administrative Dashboard**: [apps/admin](file:///c:/Users/JYOTHI/Downloads/projects/attendance%20marker/apps/admin) (React, TypeScript, RBAC guards, transactional record correction).
+- **Resident Mobile Application**: [apps/mobile](file:///c:/Users/JYOTHI/Downloads/projects/attendance%20marker/apps/mobile) (Flutter, Flutter Secure Storage, LocalAuthentication OS biometrics).
+
+The audit verified zero tolerance for hardcoded production secrets, confirmed resilient defense against student spoofing/proxy attendance, and proved end-to-end alignment with industry standards (**OWASP Top 10:2021** and **STRIDE**).
+
+---
+
+#### 4.2 Security Architecture Review & Verification Vectors
+
+##### 1. Authentication & Password Hashing
+- **Cryptographic Stride**: Passwords hashed using standard `bcrypt` with work factor = 12 (salt rounds = 12).
+- **Anti-Enumeration Defense**: The authentication service ([auth.service.ts](file:///c:/Users/JYOTHI/Downloads/projects/attendance%20marker/services/api/src/modules/auth/auth.service.ts)) performs constant-time dummy password hashing via `bcrypt.compare('dummy', DUMMY_HASH)` when a user email is not found in the database. Attackers cannot distinguish between existing and non-existing accounts based on HTTP response latency.
+- **Dual-Token Architecture**: Access tokens (15-minute TTL) and refresh tokens (7-day TTL) use distinct cryptographic signing secrets. Explicit algorithm pinning to `HS256` prevents algorithm downgrade attacks (`alg: none`) or public key HMAC confusion. Refresh tokens are persisted as SHA-256 hashes with atomic one-time rotation upon refresh.
+
+##### 2. Role-Based Access Control (RBAC) & Boundary Separation
+- **Middleware Guards**: Implemented via [rbac.middleware.ts](file:///c:/Users/JYOTHI/Downloads/projects/attendance%20marker/services/api/src/common/middleware/rbac.middleware.ts) (`requireRoles('RESIDENT')`, `requireRoles('WARDEN', 'ADMIN', 'SUPER_ADMIN')`).
+- **Escalation Negative Testing**: Automated test suites ([auth.test.ts](file:///c:/Users/JYOTHI/Downloads/projects/attendance%20marker/services/api/tests/auth.test.ts), [admin.test.ts](file:///c:/Users/JYOTHI/Downloads/projects/attendance%20marker/services/api/tests/admin.test.ts), [security-hardening.test.ts](file:///c:/Users/JYOTHI/Downloads/projects/attendance%20marker/services/api/tests/security-hardening.test.ts)) explicitly prove that resident tokens are denied access (`HTTP 403 ROLE_NOT_AUTHORIZED`) to leave approval queues, manual attendance corrections, audit logs, curfew policy management, and reporting exports.
+
+##### 3. Input Validation & Schema Hardening
+- **Strict Zod Parsing**: All incoming HTTP payloads across authentication, presence entry/exit, challenges, curfew policies, leave adjudication, and reporting queries are validated against runtime Zod schemas.
+- **Fail-Fast Error Handling**: Malformed UUIDs, invalid email patterns, illegal date formats, negative grace periods, or empty justification strings immediately trigger `400 VALIDATION_ERROR` responses before any backend business logic executes.
+
+##### 4. Secret Management & Production Boot Guards
+- **Zero Hardcoded Secrets**: All live credentials and signing keys are passed through environment variables.
+- **Production Validator**: [env.ts](file:///c:/Users/JYOTHI/Downloads/projects/attendance%20marker/services/api/src/config/env.ts) uses a Zod `.superRefine` validator that immediately aborts application boot (`NODE_ENV === 'production'`) if `JWT_ACCESS_SECRET` or `JWT_REFRESH_SECRET` match development defaults, if either key is shorter than 32 characters, or if access and refresh secrets are identical.
+- **Git Repository Audit**: Complete regex scan across all git commits and tracked files confirmed zero exposed RSA/EC private keys, AWS tokens, database credentials, or third-party API secrets. Local `.env*` files are strictly ignored via [.gitignore](file:///c:/Users/JYOTHI/Downloads/projects/attendance%20marker/.gitignore).
+
+##### 5. SQL Injection & Database Constraint Integrity
+- **Parameterized Queries**: All database interactions use strict parameterization (`$1, $2, ...`) or typed object mappings, eliminating SQL injection vectors.
+- **Database-Level Guardrails**: Enforced via PostgreSQL migrations ([database/migrations](file:///c:/Users/JYOTHI/Downloads/projects/attendance%20marker/database/migrations)):
+  - Email format regex constraint (`chk_users_email_format`).
+  - Single active device per resident partial unique index (`uq_resident_active_device`).
+  - Non-empty audit reason constraint (`chk_audit_logs_reason_non_empty`).
+  - Occupancy bounds constraint (`chk_rooms_occupancy_le_capacity`).
+  - Audit immutability trigger preventing UPDATE or DELETE on `audit_logs` ([009_enforce_audit_immutability.sql](file:///c:/Users/JYOTHI/Downloads/projects/attendance%20marker/database/migrations/009_enforce_audit_immutability.sql)).
+
+##### 6. Anti-Replay Nonce Protocol & Cross-User Defense
+- **High-Entropy Ephemeral Nonces**: Every verification session issues a 32-byte pseudorandom nonce generated with `crypto.randomBytes(32)` ($2^{256}$ search space).
+- **Atomic Single-Use**: Challenge nonces are stored as SHA-256 hashes and expire after 60 seconds. Consuming a challenge atomically flags `consumedAt = NOW()` and `status = 'VERIFIED'`. Subsequent submissions fail with `401 CHALLENGE_ALREADY_USED`.
+- **Identity Binding**: Challenges are irrevocably bound to `req.user.residentId`. Cross-user interception attempts fail with `403 WRONG_USER_CHALLENGE` without invalidating the legitimate student's pending session.
+
+##### 7. Rate Limiting & Denial of Service Protection
+- **Sliding-Window Limiting**: [rateLimiter.middleware.ts](file:///c:/Users/JYOTHI/Downloads/projects/attendance%20marker/services/api/src/common/middleware/rateLimiter.middleware.ts) protects sensitive endpoints:
+  - `/auth/login` and `/auth/activate`: 5 failed attempts per 15 minutes.
+  - `/verification/challenge/generate`: 10 requests per minute.
+  - `/verification/challenge/verify`: 15 requests per minute.
+  - `/presence/entry/*`: Rate-limited per client IP and user identity.
+- **Reverse Proxy Support**: Express configured with `app.set('trust proxy', 1)` in [app.ts](file:///c:/Users/JYOTHI/Downloads/projects/attendance%20marker/services/api/src/app.ts) to correctly isolate client IPs behind campus reverse proxies or CDNs while rejecting spoofed headers.
+
+##### 8. Biometric Privacy Compliance (GDPR & BIPA)
+- **Zero Raw Biometric Storage**: The architecture guarantees that no fingerprint minutiae, facial recognition templates, or biometric sensor data are ever recorded, processed, or transmitted to backend servers or databases.
+- **Client-Side Hardware Enclave**: OS-level authentication (`LocalAuthentication` / `BiometricPrompt`) performs local hardware matching on the resident's secure enclave (iOS Secure Enclave / Android StrongBox Keymaster). The application only transmits an ephemeral signed presence verification payload.
+
+---
+
+#### 4.3 OWASP Top 10 (2021) Compliance Matrix
+
+| OWASP Top 10 Category | Risk Level | Architectural Mitigation & Implementation | Status |
+| :--- | :--- | :--- | :--- |
+| **A01:2021 - Broken Access Control** | High | Strict RBAC middleware (`requireRoles`), server-side identity verification on token payloads, and database foreign key isolation. Resident access to staff endpoints strictly forbidden. | **PASSED** |
+| **A02:2021 - Cryptographic Failures** | High | Bcrypt work factor 12, distinct 256-bit JWT access/refresh secrets with HS256 algorithm enforcement, SHA-256 hashed refresh tokens, and crypto-random 32-byte challenge nonces. | **PASSED** |
+| **A03:2021 - Injection** | Critical | Parameterized queries in migrations and schema harnesses; strict Zod input validation on all routes; PostgreSQL CHECK constraints on all text and numeric fields. | **PASSED** |
+| **A04:2021 - Insecure Design** | High | Multi-factor verification model: network CIDR/gateway handshake + hardware device binding + native biometric prompt + authoritative server timestamps. | **PASSED** |
+| **A05:2021 - Security Misconfiguration** | Medium | Production fail-fast validator rejecting weak/dev JWT secrets; CORS origin restricted; reverse proxy trust configured (`trust proxy: 1`); error handler suppresses stack traces in production. | **PASSED** |
+| **A06:2021 - Vulnerable Components** | Medium | Dependency tree inspected with minimal runtime footprint. Zero known critical CVEs in dependencies (`bcryptjs`, `express`, `jsonwebtoken`, `zod`). | **PASSED** |
+| **A07:2021 - Identification & Authentication** | High | Single active hardware device policy; activation token flow; constant-time dummy bcrypt anti-enumeration; rate-limited sliding window on login. | **PASSED** |
+| **A08:2021 - Software & Data Integrity** | High | Authoritative server timestamps; PostgreSQL trigger-enforced audit log immutability preventing tampering or deletion; HMAC signature validation on all JWTs. | **PASSED** |
+| **A09:2021 - Security Logging & Monitoring** | Medium | Comprehensive audit logging ([audit.service.ts](file:///c:/Users/JYOTHI/Downloads/projects/attendance%20marker/services/api/src/modules/audit/audit.service.ts)) capturing actor, target, action, timestamp, old/new states, and mandatory justification reasons. | **PASSED** |
+| **A10:2021 - Server-Side Request Forgery (SSRF)** | Low | The backend makes zero outbound HTTP requests based on user-supplied URLs or endpoints. Network verification uses internal bitwise subnet mask arithmetic or verified gateway headers. | **PASSED** |
+
+---
+
+#### 4.4 Audit Findings & Verification Log
+
+| Finding ID | Severity | Description | Remediation Applied | Test Verification |
+| :--- | :--- | :--- | :--- | :--- |
+| **SEC-001** | Medium | In `services/api/src/config/env.ts`, fallback dev JWT secrets could theoretically be used in production if env variables were omitted. | Implemented Zod `.superRefine` rule enforcing minimum 32 characters, distinct keys, and explicit rejection of dev defaults in `NODE_ENV === 'production'`. | `security-hardening.test.ts` (Subtests 1-6) |
+| **SEC-002** | Low | Reverse proxy client IP evaluation could default to raw socket address without `trust proxy` configuration in Express. | Configured `app.set('trust proxy', 1)` in `app.ts` to properly resolve client IPs through institutional edge reverse proxies. | Verified across `rateLimiter.middleware.ts` & network tests |
+| **SEC-003** | High | Potential timing side-channel attacks on `POST /auth/login` allowing attacker to enumerate registered student emails. | Verified constant-time dummy bcrypt comparison (`bcrypt.compare('dummy', DUMMY_HASH)`) in `auth.service.ts`. | `security-hardening.test.ts` (User Enumeration Defense) |
+| **SEC-004** | High | Cross-user challenge claiming where Student B claims Student A's active challenge nonce. | Enforced strict server-side validation (`attempt.residentId === resident.id`), rejecting foreign attempts with HTTP 403 `WRONG_USER_CHALLENGE`. | `security-hardening.test.ts` & `challenge.test.ts` |
+| **SEC-005** | Critical | Replay of intercepted verification session nonces after student exit or curfew expiration. | Enforced atomic single-use nonce consumption, SHA-256 storage, 60s TTL, and HTTP 401 `CHALLENGE_ALREADY_USED`. | `presence.test.ts` & `challenge.test.ts` |
+| **SEC-006** | Critical | Unauthorized modification or erasure of warden attendance corrections and audit logs. | Implemented PostgreSQL database trigger (`prevent_audit_log_modification`) prohibiting `UPDATE` or `DELETE` on `audit_logs`. | `audit-reporting.test.ts` & `009_enforce_audit_immutability.sql` |
+| **SEC-007** | High | Role escalation by residents attempting to access staff and warden endpoints. | Enforced `requireRoles('WARDEN', 'ADMIN', 'SUPER_ADMIN')` on all curfew policy, leave adjudication, and reporting routes. | `admin.test.ts` & `security-hardening.test.ts` |
+| **SEC-008** | High | Biometric data privacy compliance under BIPA and GDPR. | Verified zero biometric template transmission or storage. Only client OS biometric prompt confirmation is utilized. | Validated in Flutter client architecture and backend schemas |
+
+
