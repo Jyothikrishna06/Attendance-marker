@@ -1,0 +1,21 @@
+{
+  "name": "attendance-marker",
+  "version": "1.0.0",
+  "description": "Smart Hostel Curfew & Multi-Factor Presence Verification System",
+  "scripts": {
+    "test": "node --test database/tests/schema-constraints.test.js",
+    "test:db": "node --test database/tests/schema-constraints.test.js"
+  },
+  "keywords": [
+    "hostel",
+    "curfew",
+    "multi-factor",
+    "presence-verification",
+    "security"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "pg-mem": "^3.0.5"
+  }
+}
