@@ -23,15 +23,11 @@ import { LeaveApprovalQueue } from './components/LeaveApprovalQueue.js';
 import { AuditLogViewer } from './components/AuditLogViewer.js';
 
 export const App: React.FC = () => {
-  // Authentication & Session
-  const [session, setSession] = useState<UserSession | null>({
-    userId: 'c0000000-0000-0000-0000-000000000002',
-    name: 'Rajesh Sharma',
-    email: 'warden.sharma@hostel.edu',
-    role: 'WARDEN',
-    accessToken: '',
-    refreshToken: '',
-  });
+  // Authentication & Session (starts completely null, zero fake defaults)
+  const [session, setSession] = useState<UserSession | null>(null);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   // UI State
   const [activeTab, setActiveTab] = useState<'ROSTER' | 'LEAVE' | 'AUDIT'>('ROSTER');
@@ -70,18 +66,24 @@ export const App: React.FC = () => {
     setTimeout(() => setNotification(null), 4000);
   };
 
-  // Switch demo user
-  const handleSwitchUser = async (role: 'WARDEN' | 'ADMIN' | 'RESIDENT') => {
+  // Authentic Staff Login
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginEmail.trim() || !loginPassword) {
+      setLoginError('Please enter both your institutional email and password.');
+      return;
+    }
     try {
       setLoading(true);
-      let creds = { email: 'warden.sharma@hostel.edu', password: 'WardenSecurePass!2026' };
-      if (role === 'ADMIN') {
-        creds = { email: 'admin@campus.edu', password: 'AdminSecurePass!2026' };
-      } else if (role === 'RESIDENT') {
-        creds = { email: 'aarav.patel@student.edu', password: 'ResidentAaravPass!2026' };
+      setLoginError(null);
+      const authData = await api.login(loginEmail.trim(), loginPassword);
+      if (
+        authData.user.role !== 'WARDEN' &&
+        authData.user.role !== 'ADMIN' &&
+        authData.user.role !== 'SUPER_ADMIN'
+      ) {
+        throw new Error('Access denied: Staff credentials required to access the Warden Operations Console.');
       }
-
-      const authData = await api.login(creds.email, creds.password);
       setSession({
         userId: authData.user.id,
         name: authData.user.name,
@@ -90,9 +92,10 @@ export const App: React.FC = () => {
         accessToken: authData.accessToken,
         refreshToken: authData.refreshToken,
       });
-      showNotification(`Switched session to ${authData.user.name} (${authData.user.role})`);
+      setLoginPassword('');
+      showNotification(`Authenticated as ${authData.user.name} (${authData.user.role})`);
     } catch (err: any) {
-      showNotification(`Login failed: ${err.message}`);
+      setLoginError(err?.message || 'Authentication failed. Please verify credentials.');
     } finally {
       setLoading(false);
     }
@@ -101,6 +104,8 @@ export const App: React.FC = () => {
   const handleLogout = () => {
     api.setToken(null);
     setSession(null);
+    setLoginEmail('');
+    setLoginPassword('');
     showNotification('Logged out successfully.');
   };
 
@@ -138,23 +143,26 @@ export const App: React.FC = () => {
   // Load Audit Logs
   const loadAuditLogs = useCallback(async () => {
     try {
-      const data = await api.getAuditLogs(selectedAuditEntity);
+      const data = await api.getAuditLogs();
       setAuditLogs(data);
     } catch (err) {
       console.error('Failed to load audit logs:', err);
     }
-  }, [selectedAuditEntity]);
+  }, []);
 
-  // Refresh all
+  // Refresh All Data
   const refreshAll = useCallback(async () => {
+    if (!session) return;
     setLoading(true);
     await Promise.all([loadCurfewPolicy(), loadStatusRoster(), loadLeaves(), loadAuditLogs()]);
     setLoading(false);
-  }, [loadCurfewPolicy, loadStatusRoster, loadLeaves, loadAuditLogs]);
+  }, [session, loadCurfewPolicy, loadStatusRoster, loadLeaves, loadAuditLogs]);
 
   useEffect(() => {
-    refreshAll();
-  }, [refreshAll]);
+    if (session) {
+      refreshAll();
+    }
+  }, [session, refreshAll]);
 
   // Action: Curfew Rule Amendment
   const handleUpdateCurfewPolicy = async (
@@ -215,7 +223,7 @@ export const App: React.FC = () => {
 
   return (
     <div className="dashboard-container">
-      <Header session={session} onLogout={handleLogout} onSwitchUser={handleSwitchUser} />
+      <Header session={session} onLogout={handleLogout} />
 
       {/* Global Toast Notification */}
       {notification && (
@@ -242,99 +250,239 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* Nav Tabs */}
-      <nav className="nav-tabs">
-        <button
-          className={`nav-tab ${activeTab === 'ROSTER' ? 'active' : ''}`}
-          onClick={() => setActiveTab('ROSTER')}
+      {/* Unauthenticated State: Clean Staff Login Form */}
+      {!session ? (
+        <main
+          className="main-content"
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            minHeight: '65vh',
+          }}
         >
-          <span>👥 Presence Roster</span>
-        </button>
+          <div
+            style={{
+              maxWidth: '440px',
+              width: '100%',
+              background: 'var(--bg-card)',
+              padding: '2.5rem',
+              borderRadius: 'var(--radius-lg)',
+              border: '1px solid var(--border)',
+              boxShadow: 'var(--shadow-lg)',
+            }}
+          >
+            <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+              <div style={{ fontSize: '2.75rem', marginBottom: '0.5rem' }}>🏛️</div>
+              <h2 style={{ fontSize: '1.45rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                Staff Portal Login
+              </h2>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.35rem' }}>
+                Warden, Administrator & Security Operations
+              </p>
+            </div>
 
-        <button
-          className={`nav-tab ${activeTab === 'LEAVE' ? 'active' : ''}`}
-          onClick={() => setActiveTab('LEAVE')}
-        >
-          <span>📋 Leave Approval Queue</span>
-          {pendingLeavesCount > 0 && <span className="nav-badge">{pendingLeavesCount}</span>}
-        </button>
+            {loginError && (
+              <div
+                className="alert-banner"
+                style={{
+                  marginBottom: '1.25rem',
+                  background: 'var(--danger-bg)',
+                  borderColor: 'var(--danger-border)',
+                  color: 'var(--danger)',
+                }}
+              >
+                {loginError}
+              </div>
+            )}
 
-        <button
-          className={`nav-tab ${activeTab === 'AUDIT' ? 'active' : ''}`}
-          onClick={() => setActiveTab('AUDIT')}
-        >
-          <span>🔒 Immutable Audit Logs</span>
-        </button>
+            <form onSubmit={handleLoginSubmit}>
+              <div style={{ marginBottom: '1.25rem' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    marginBottom: '0.4rem',
+                    color: 'var(--text-main)',
+                  }}
+                  htmlFor="staff-email"
+                >
+                  Institutional Email
+                </label>
+                <input
+                  id="staff-email"
+                  type="email"
+                  placeholder="Enter staff email"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    background: 'var(--bg-input)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--text-main)',
+                    fontSize: '0.95rem',
+                  }}
+                  autoFocus
+                  required
+                />
+              </div>
 
-        {loading && (
-          <div style={{ marginLeft: 'auto', alignSelf: 'center', fontSize: '0.8rem', color: 'var(--cyan)' }}>
-            🔄 Syncing operational feed...
+              <div style={{ marginBottom: '1.75rem' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    marginBottom: '0.4rem',
+                    color: 'var(--text-main)',
+                  }}
+                  htmlFor="staff-password"
+                >
+                  Password
+                </label>
+                <input
+                  id="staff-password"
+                  type="password"
+                  placeholder="Enter password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    background: 'var(--bg-input)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--text-main)',
+                    fontSize: '0.95rem',
+                  }}
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="btn btn-primary"
+                style={{
+                  width: '100%',
+                  padding: '0.85rem',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+                disabled={loading}
+              >
+                {loading ? 'Authenticating...' : 'Sign In to Operations Console'}
+              </button>
+            </form>
           </div>
-        )}
-      </nav>
+        </main>
+      ) : (
+        <>
+          {/* Nav Tabs */}
+          <nav className="nav-tabs">
+            <button
+              className={`nav-tab ${activeTab === 'ROSTER' ? 'active' : ''}`}
+              onClick={() => setActiveTab('ROSTER')}
+            >
+              <span>👥 Presence Roster</span>
+            </button>
 
-      {/* Main Body */}
-      <main className="main-content">
-        {/* Curfew Policy Overview */}
-        <CurfewStatusCard policy={curfewPolicy} onUpdatePolicy={handleUpdateCurfewPolicy} />
+            <button
+              className={`nav-tab ${activeTab === 'LEAVE' ? 'active' : ''}`}
+              onClick={() => setActiveTab('LEAVE')}
+            >
+              <span>📋 Leave Approval Queue</span>
+              {pendingLeavesCount > 0 && <span className="nav-badge">{pendingLeavesCount}</span>}
+            </button>
 
-        {activeTab === 'ROSTER' && (
-          <>
-            {/* KPI Cards */}
-            <CurfewSummaryCards
-              summary={curfewSummary}
-              onFilterByStatus={(status) => setFilters({ ...filters, status })}
+            <button
+              className={`nav-tab ${activeTab === 'AUDIT' ? 'active' : ''}`}
+              onClick={() => setActiveTab('AUDIT')}
+            >
+              <span>🔒 Immutable Audit Logs</span>
+            </button>
+
+            {loading && (
+              <div
+                style={{
+                  marginLeft: 'auto',
+                  alignSelf: 'center',
+                  fontSize: '0.8rem',
+                  color: 'var(--cyan)',
+                }}
+              >
+                🔄 Syncing operational feed...
+              </div>
+            )}
+          </nav>
+
+          {/* Main Body */}
+          <main className="main-content">
+            {/* Curfew Policy Overview */}
+            <CurfewStatusCard policy={curfewPolicy} onUpdatePolicy={handleUpdateCurfewPolicy} />
+
+            {activeTab === 'ROSTER' && (
+              <>
+                {/* KPI Cards */}
+                <CurfewSummaryCards
+                  summary={curfewSummary}
+                  onFilterByStatus={(status) => setFilters({ ...filters, status })}
+                />
+
+                {/* Failure Alerts Banner */}
+                <VerificationFailureAlerts
+                  failedResidents={failedResidents}
+                  onCorrectRecord={(res) => setCorrectingResident(res)}
+                />
+
+                {/* Filters Bar */}
+                <FilterBar
+                  filters={filters}
+                  onFilterChange={(newF) => setFilters({ ...filters, ...newF })}
+                  onReset={() =>
+                    setFilters({
+                      hostelId: 'ALL',
+                      floor: 'ALL',
+                      roomSearch: '',
+                      status: 'ALL',
+                      searchTerm: '',
+                    })
+                  }
+                />
+
+                {/* Live Table */}
+                <CurfewRosterTable
+                  roster={filteredRoster}
+                  onCorrectRecord={(res) => setCorrectingResident(res)}
+                />
+              </>
+            )}
+
+            {activeTab === 'LEAVE' && (
+              <LeaveApprovalQueue leaves={leaves} onAdjudicate={handleAdjudicateLeave} />
+            )}
+
+            {activeTab === 'AUDIT' && (
+              <AuditLogViewer
+                logs={auditLogs}
+                selectedEntity={selectedAuditEntity}
+                onEntityChange={(entity) => setSelectedAuditEntity(entity)}
+              />
+            )}
+          </main>
+
+          {/* Record Correction Modal */}
+          {correctingResident && (
+            <RecordCorrectionModal
+              resident={correctingResident}
+              onClose={() => setCorrectingResident(null)}
+              onSubmit={handleRecordCorrection}
             />
-
-            {/* Failure Alerts Banner */}
-            <VerificationFailureAlerts
-              failedResidents={failedResidents}
-              onCorrectRecord={(res) => setCorrectingResident(res)}
-            />
-
-            {/* Filters Bar */}
-            <FilterBar
-              filters={filters}
-              onFilterChange={(newF) => setFilters({ ...filters, ...newF })}
-              onReset={() =>
-                setFilters({
-                  hostelId: 'ALL',
-                  floor: 'ALL',
-                  roomSearch: '',
-                  status: 'ALL',
-                  searchTerm: '',
-                })
-              }
-            />
-
-            {/* Live Table */}
-            <CurfewRosterTable
-              roster={filteredRoster}
-              onCorrectRecord={(res) => setCorrectingResident(res)}
-            />
-          </>
-        )}
-
-        {activeTab === 'LEAVE' && (
-          <LeaveApprovalQueue leaves={leaves} onAdjudicate={handleAdjudicateLeave} />
-        )}
-
-        {activeTab === 'AUDIT' && (
-          <AuditLogViewer
-            logs={auditLogs}
-            selectedEntity={selectedAuditEntity}
-            onEntityChange={(entity) => setSelectedAuditEntity(entity)}
-          />
-        )}
-      </main>
-
-      {/* Record Correction Modal */}
-      {correctingResident && (
-        <RecordCorrectionModal
-          resident={correctingResident}
-          onClose={() => setCorrectingResident(null)}
-          onSubmit={handleRecordCorrection}
-        />
+          )}
+        </>
       )}
     </div>
   );

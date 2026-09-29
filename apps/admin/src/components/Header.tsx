@@ -4,10 +4,9 @@ import { UserSession } from '../types/index.js';
 interface HeaderProps {
   session: UserSession | null;
   onLogout: () => void;
-  onSwitchUser: (role: 'WARDEN' | 'ADMIN' | 'RESIDENT') => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ session, onLogout, onSwitchUser }) => {
+export const Header: React.FC<HeaderProps> = ({ session, onLogout }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -50,13 +49,8 @@ export const Header: React.FC<HeaderProps> = ({ session, onLogout, onSwitchUser 
             </button>
           </div>
         ) : (
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button className="btn btn-primary btn-sm" onClick={() => onSwitchUser('WARDEN')}>
-              Demo Login: Warden
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={() => onSwitchUser('ADMIN')}>
-              Demo Login: Admin
-            </button>
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+            🔒 Staff Authentication Required
           </div>
         )}
       </div>

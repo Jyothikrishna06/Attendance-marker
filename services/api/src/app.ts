@@ -340,46 +340,6 @@ export function createApp(
         </tbody>
       </table>
     </div>
-
-    <div class="card">
-      <h2>Seeded Test Credentials</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Role</th>
-            <th>Email</th>
-            <th>Password</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><strong>Super Admin</strong></td>
-            <td><code>admin@campus.edu</code></td>
-            <td><code>AdminSecurePass!2026</code></td>
-            <td>Active</td>
-          </tr>
-          <tr>
-            <td><strong>Warden</strong></td>
-            <td><code>warden.sharma@hostel.edu</code></td>
-            <td><code>WardenSecurePass!2026</code></td>
-            <td>Active</td>
-          </tr>
-          <tr>
-            <td><strong>Resident (Active)</strong></td>
-            <td><code>aarav.patel@student.edu</code></td>
-            <td><code>SecureStudentPass!2026</code></td>
-            <td>Active (Bound Device)</td>
-          </tr>
-          <tr>
-            <td><strong>Resident (Pending)</strong></td>
-            <td><code>rohan.verma@student.edu</code></td>
-            <td><em>Use Token: <code>ACTIVATE_ROHAN_2026_TOKEN</code></em></td>
-            <td>Pending Activation</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
   </div>
 </body>
 </html>
