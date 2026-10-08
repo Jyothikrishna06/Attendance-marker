@@ -358,18 +358,18 @@ describe('PostgreSQL Relational Schema & Constraint Integrity Tests', () => {
   // 5. Seed Data Verification
   // ----------------------------------------------------------------------------
   describe('Seed Data Integrity', () => {
-    it('should have seeded 2 hostels, rooms, 5 users, 3 residents, and 4 devices', () => {
+    it('should have seeded 2 hostels, rooms, 6 users, 4 residents, and 5 devices', () => {
       const hostelCount = db.public.one('SELECT count(*) as c FROM hostels');
       assert.equal(Number(hostelCount.c), 2);
 
       const userCount = db.public.one('SELECT count(*) as c FROM users');
-      assert.equal(Number(userCount.c), 5);
+      assert.equal(Number(userCount.c), 6);
 
       const residentCount = db.public.one('SELECT count(*) as c FROM residents');
-      assert.equal(Number(residentCount.c), 3);
+      assert.equal(Number(residentCount.c), 4);
 
       const deviceCount = db.public.one('SELECT count(*) as c FROM devices');
-      assert.equal(Number(deviceCount.c), 4);
+      assert.equal(Number(deviceCount.c), 5);
 
       const activeRules = db.public.many('SELECT * FROM curfew_rules WHERE is_active = TRUE');
       assert.equal(activeRules.length, 2);

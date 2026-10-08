@@ -8,7 +8,11 @@ import {
   ResidentStatus,
 } from '../types/index.js';
 
-const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:4000';
+const API_BASE =
+  (import.meta as any).env?.VITE_API_URL ||
+  (typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost'
+    ? `http://${window.location.hostname}:4000`
+    : 'http://localhost:4000');
 
 class ApiService {
   private token: string | null = null;
@@ -43,6 +47,7 @@ class ApiService {
 
     const res = await fetch(`${API_BASE}${path}`, {
       ...options,
+      credentials: 'include',
       headers,
     });
 
@@ -61,7 +66,7 @@ class ApiService {
   }
 
   // Authentication
-  async login(email: string, password: string) {
+  async login(email: string, password: string, wardenSecretCode?: string) {
     const res = await this.request<{
       data: {
         accessToken: string;
@@ -70,7 +75,7 @@ class ApiService {
       };
     }>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, wardenSecretCode: wardenSecretCode?.trim() || undefined }),
     });
 
     this.setToken(res.data.accessToken);
@@ -180,6 +185,7 @@ class ApiService {
     const res = await this.request<{ data: any }>('/presence/entry/verify', {
       method: 'POST',
       body: JSON.stringify({
+        sessionId: challengeId,
         challengeId,
         challengeNonce,
         biometricConfirmed,

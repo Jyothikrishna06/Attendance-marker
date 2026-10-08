@@ -123,6 +123,32 @@ describe('Authentication & RBAC Security Test Suite', () => {
       assert.equal(res.status, 400);
       assert.equal(res.body.error.code, 'VALIDATION_ERROR');
     });
+
+    it('should reject resident login when warden secret code is wrong with 403 WARDEN_AUTHORIZATION_REQUIRED', async () => {
+      const res = await request(app)
+        .post('/auth/login')
+        .send({
+          email: 'aarav.patel@student.edu',
+          password: 'SecureStudentPass!2026',
+          wardenSecretCode: 'wrong_code_9999',
+        });
+
+      assert.equal(res.status, 403);
+      assert.equal(res.body.error.code, 'WARDEN_AUTHORIZATION_REQUIRED');
+    });
+
+    it('should accept resident login when valid warden secret code 2006 is provided', async () => {
+      const res = await request(app)
+        .post('/auth/login')
+        .send({
+          email: 'aarav.patel@student.edu',
+          password: 'SecureStudentPass!2026',
+          wardenSecretCode: '2006',
+        });
+
+      assert.equal(res.status, 200);
+      assert.ok(res.body.data.accessToken);
+    });
   });
 
   // ----------------------------------------------------------------------------

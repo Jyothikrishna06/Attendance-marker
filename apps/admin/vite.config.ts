@@ -4,13 +4,14 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   server: {
+    host: '0.0.0.0',
     port: 5173,
     proxy: {
-      '/auth': 'http://localhost:4000',
-      '/admin': 'http://localhost:4000',
-      '/curfew': 'http://localhost:4000',
-      '/presence': 'http://localhost:4000',
-      '/verification': 'http://localhost:4000',
+      '/auth': { target: 'http://localhost:4000', changeOrigin: true, xfwd: true },
+      '/admin': { target: 'http://localhost:4000', changeOrigin: true, xfwd: true },
+      '/curfew': { target: 'http://localhost:4000', changeOrigin: true, xfwd: true },
+      '/presence': { target: 'http://localhost:4000', changeOrigin: true, xfwd: true },
+      '/verification': { target: 'http://localhost:4000', changeOrigin: true, xfwd: true },
     },
   },
 });

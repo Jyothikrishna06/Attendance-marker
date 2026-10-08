@@ -1,89 +1,113 @@
-# Smart Hostel Curfew & Multi-Factor Presence Verification System
+# Smart Hostel Curfew & Attendance Marker System
 
-An adaptive, security-oriented institutional presence verification platform that orchestrates multiple independent signals—account authentication, hardware device binding, institution-controlled network evidence, device-native biometric confirmation, and short-lived randomized cryptographic challenges—for transparent, auditable hostel curfew verification.
+A full-stack web application designed for college hostels to automate curfew tracking and student attendance verification.
+
+Instead of manual physical attendance or paper sign-in registers, attendance is verified automatically using two factors:
+1. **Hostel Wi-Fi Connection** (Verifies the student's phone is connected to the hostel network).
+2. **Device Biometric Scan** (Verifies the student's fingerprint or face ID on their phone).
+
+The Warden Dashboard updates in real-time as students mark their presence, showing who is inside, who is outside, and who is on approved leave before the **10:30 PM** curfew deadline.
 
 ---
 
-## 1. Repository Structure
+## 📁 Project Structure
+
+The project is structured simply into three folders:
 
 ```plaintext
 attendance-marker/
-├── apps/
-│   ├── admin/      # React 18 + Vite + Tailwind Dashboard (Roster, Leave, Corrections, Audits)
-│   └── mobile/     # Flutter Resident App (Secure Storage, Typed Client, Native Biometrics)
-├── services/
-│   └── api/        # Node.js + TypeScript Backend (Clean Architecture, Zod, JWT, RBAC)
-├── database/       # PostgreSQL Migrations (13 Tables, Indexes, Triggers, Immutability)
-└── docs/           # Architecture, Threat Model, API Specification, Database ERD, Test Matrix
+├── apps/admin/       # Frontend (React 18 + Vite + Tailwind CSS)
+│   ├── src/
+│   │   ├── components/    # Reusable UI components (Roster Table, Leave Queue, Curfew Card)
+│   │   ├── services/      # api.ts (calls the backend API)
+│   │   ├── App.tsx        # Main application page (Login, Warden view, Student view)
+│   │   └── main.tsx       # Entry point
+│   └── vite.config.ts     # Vite configuration
+│
+├── services/api/     # Backend (Node.js + Express + TypeScript)
+│   ├── src/
+│   │   ├── config/        # Environment settings (Port, Curfew time, Secret PIN)
+│   │   ├── modules/       # Clean feature folders (auth, presence, curfew, admin)
+│   │   ├── common/        # Auth middleware & error handlers
+│   │   ├── app.ts         # Express routes & middleware setup
+│   │   └── server.ts      # Starts the backend server on port 4000
+│   └── package.json
+│
+└── database/         # Database
+    └── schema.sql         # PostgreSQL schema (users, rooms, attendance logs, leaves)
 ```
 
 ---
 
-## 2. Core Subsystems
+## 🚀 How to Run the Project
 
-### 2.1 Resident Mobile Application (`apps/mobile`)
-- **Technology**: Flutter / Dart cross-platform mobile client.
-- **Hardware Device Binding**: Automatically extracts device hardware fingerprints and binds a single active device per resident.
-- **Native Biometrics**: Integrates with Android Jetpack `BiometricPrompt` and iOS `LocalAuthentication` with **zero raw biometric storage** or template transmission (BIPA/GDPR compliant).
-- **Session Lifecycle**: Secure key-value storage (`flutter_secure_storage`) with automatic Bearer token injection and transparent 401 token refresh interception.
-- **Offline & Error Resilience**: Graceful state transitions, network timeout detection, and server-authoritative error handling.
+### Prerequisites
+- Node.js (v18 or higher)
+- npm
 
-### 2.2 Warden & Administrative Web Dashboard (`apps/admin`)
-- **Technology**: React 18, TypeScript, Vite, Tailwind CSS.
-- **Live Curfew Tracking**: Real-time curfew deadlines, grace period counters, and curfew rule amendments with mandatory justification strings.
-- **Multi-Dimensional Roster**: Filter residents by hostel, block/floor, room, status (`VERIFIED_INSIDE`, `VERIFIED_OUTSIDE`, `PENDING_VERIFICATION`, `APPROVED_LEAVE`, `NOT_VERIFIED`, `VERIFICATION_FAILED`), or search query.
-- **Transactional Attendance Corrections**: Wardens can correct presence status (e.g. following physical room inspection) with mandatory rationale; commits concurrently to the immutable audit ledger.
-- **Leave Adjudication Queue**: Streamlined queue for approving or rejecting outpass and emergency leave applications.
-- **Verification Failure Alerts**: High-visibility operational banner highlighting network rejections, biometric cancellations, or expired nonces.
-- **Immutable Audit Ledger**: Inspection console displaying actor, target, timestamp, action, and JSON state diffs.
-
-### 2.3 Backend API Service (`services/api`)
-- **Technology**: Node.js, Express, TypeScript, Zod.
-- **Dual-Token Authentication**: 15-minute access tokens and 7-day refresh tokens signed with distinct secrets (`HS256`), constant-time dummy bcrypt anti-enumeration defense, and SHA-256 refresh token rotation.
-- **Pluggable Network Verification**: `INetworkEvidenceProvider` interface supporting bitwise subnet CIDR matching (`MockNetworkProvider`) and reverse-proxy HMAC gateway validation (`GatewayNetworkProvider`).
-- **Anti-Replay Nonce Engine**: 32-byte cryptographic random nonces with server-authoritative 60-second TTL, single-use atomic consumption, and cross-user challenge mismatch defense (`403 WRONG_USER_CHALLENGE`).
-- **Deterministic Curfew Evaluation Service**: Background and on-demand evaluation engine resolving leave windows, grace periods, and late returns.
-- **Audit & Executive Reporting**: Immutable audit events, daily summary metrics, late return logs, and downloadable CSV report exports (`/admin/reports/*`).
-- **Rate Limiting & Reverse Proxy Support**: In-memory sliding-window limiters on login, activation, and challenge endpoints, with `trust proxy: 1` support.
-
-### 2.4 Relational Database & Constraints (`database`)
-- **Technology**: PostgreSQL 16 (13 tables, 9 sequential migrations).
-- **Relational Integrity**: Strict foreign keys with cascading deletions on resident profiles and restricted deletions on hostels/rooms.
-- **Anti-Fraud Constraints**:
-  - Single active device partial unique index (`uq_resident_active_device`).
-  - Check constraints for RFC-compliant emails, occupancy bounds, non-negative grace periods, and non-empty justification strings.
-  - Database trigger prohibiting `UPDATE` or `DELETE` on `audit_logs` (`009_enforce_audit_immutability.sql`).
-
----
-
-## 3. Test Suites & Verification Baseline
-
-The repository enforces automated testing across all layers (171 tests, 0 failures):
-
+### Step 1: Start Backend API Server
+Open a terminal in the project root:
 ```bash
-# Run all test suites (Database + API + Admin)
-npm test
-
-# Run PostgreSQL schema & constraint integrity test harness (20 tests)
-npm run test:db
-
-# Run Backend API unit & integration test suites (141 tests, 59 suites)
-npm run test:api
-
-# Run Admin dashboard unit & E2E logic test suite (10 tests)
-npm run test:admin
-
-# Run TypeScript static typechecker (0 errors)
-npm run typecheck
+npm run dev --prefix services/api
 ```
+The backend API runs on `http://localhost:4000` (and on your local Wi-Fi IP `http://192.168.20.6:4000`).
+
+### Step 2: Start Frontend Web Portal
+Open a second terminal in the project root:
+```bash
+npm run dev --prefix apps/admin
+```
+The frontend portal runs on:
+- **Laptop:** `http://localhost:5173`
+- **Phone / Mobile:** `http://192.168.20.6:5173` *(connect phone to the same Wi-Fi)*
 
 ---
 
-## 4. Documentation Index
+## 🔑 Login Credentials
 
-- [Architecture & System Design](docs/architecture.md): Pluggable network verification, presence state machine, and curfew evaluation engine.
-- [Threat Model & Security Hardening Report](docs/threat-model.md): STRIDE threat matrix, OWASP Top 10 (2021) compliance, and vulnerability assessment report.
-- [API Specification & RBAC Matrix](docs/api-specification.md): Endpoints, request/response schemas, error dictionaries, and RBAC guards.
-- [Database Schema & ERD](docs/database.md): Relational ER diagram, table schemas, index design, and audit immutability triggers.
-- [Admin Dashboard Guide](apps/admin/README.md): React dashboard architecture, components, and workflow instructions.
-- [Resident Mobile App Guide](apps/mobile/README.md): Flutter architecture, biometric privacy compliance, and test documentation.
+### 1. Student / Resident Logins
+> **Student Warden PIN:** `486396` (required for student device authentication)
+
+- **Blessy Binu**
+  - **Email:** `blessybinu4287@gmail.com`
+  - **Password:** `blessybinu@123`
+  - **Secret PIN:** `486396`
+
+- **Ahanya M R**
+  - **Email:** `ahanya_ec24@ug.cusat.ac.in`
+  - **Password:** `ahanya@123`
+  - **Secret PIN:** `486396`
+
+- **Jyothikrishna S**
+  - **Email:** `24cs471jyot@ug.cusat.ac.in`
+  - **Password:** `CusatPass!2026`
+  - **Secret PIN:** `486396`
+
+### 2. Staff Logins (No PIN required)
+- **Super Admin:**
+  - **Email:** `jyothi.jojo6@gmail.com`
+  - **Password:** `Jyothi@2006`
+
+- **Hostel Warden:**
+  - **Email:** `warden.sharma@hostel.edu`
+  - **Password:** `WardenSecurePass!2026`
+
+---
+
+## 💡 Key Features
+
+- **Automated Two-Factor Verification**: Attendance requires both institutional Wi-Fi and device biometric confirmation.
+- **Curfew Countdown & Status**: Automatic 10:30 PM curfew evaluation with a 15-minute grace period.
+- **Live Warden Roster**: Displays student names, rooms, attendance status, and verification badges in real time.
+- **Outpass & Leave Management**: Students can apply for leave; wardens can approve or reject outpass requests directly from the portal.
+- **Multi-Device Support**: Optimized for desktop browsers (for Wardens) and mobile screens (for Students).
+
+---
+
+## 🧪 Running Automated Tests
+
+To run the complete test suite:
+```bash
+npm test
+```
+All tests verify database integrity, authentication security, presence verification, and frontend UI logic.

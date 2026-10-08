@@ -3,8 +3,8 @@ import { env } from './config/env.js';
 
 const app = createApp();
 
-const server = app.listen(env.PORT, () => {
-  console.log(`[Hostel Curfew API] Running in ${env.NODE_ENV} mode on port ${env.PORT}`);
+const server = app.listen(env.PORT, '0.0.0.0', () => {
+  console.log(`[Hostel Curfew API] Running in ${env.NODE_ENV} mode on port ${env.PORT} (bound to 0.0.0.0)`);
 });
 
 process.on('SIGTERM', () => {

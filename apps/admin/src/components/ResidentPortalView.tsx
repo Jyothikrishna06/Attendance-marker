@@ -153,12 +153,53 @@ export const ResidentPortalView: React.FC<ResidentPortalViewProps> = ({
           textAlign: 'center',
         }}
       >
-        <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>🛡️</div>
         <h3 style={{ fontSize: '1.3rem', fontWeight: 700 }}>Curfew Presence Attestation</h3>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', maxWidth: '520px', margin: '0.5rem auto 1.5rem' }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', maxWidth: '520px', margin: '0.5rem auto 1.25rem' }}>
           Submit your presence verification before the curfew deadline. This operation generates a 32-byte 
-          cryptographic challenge and validates institutional network and biometric signals.
+          cryptographic challenge and validates institutional campus Wi-Fi network and biometric signals.
         </p>
+
+        {/* Network & Hardware Verification Details */}
+        <div
+          style={{
+            background: '#09101d',
+            border: '1px solid var(--border)',
+            borderRadius: '8px',
+            padding: '1rem',
+            maxWidth: '560px',
+            margin: '0 auto 1.5rem',
+            textAlign: 'left',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: '0.75rem',
+            fontSize: '0.825rem',
+          }}
+        >
+          <div>
+            <span style={{ color: 'var(--text-muted)' }}>📶 Authorized Network:</span>
+            <div style={{ color: 'var(--cyan)', fontWeight: 600, marginTop: '2px' }}>
+              Authorized Hotspot / Wi-Fi
+            </div>
+          </div>
+          <div>
+            <span style={{ color: 'var(--text-muted)' }}>🔒 Hardware Binding:</span>
+            <div style={{ color: '#a78bfa', fontWeight: 600, marginTop: '2px' }}>
+              {presenceData?.activeDevice?.deviceModel || 'Approved Hardware Device'}
+            </div>
+          </div>
+          <div>
+            <span style={{ color: 'var(--text-muted)' }}>🛡️ Anti-Replay Nonce:</span>
+            <div style={{ color: 'var(--success)', fontWeight: 600, marginTop: '2px' }}>
+              SHA-256 (60s Server TTL)
+            </div>
+          </div>
+          <div>
+            <span style={{ color: 'var(--text-muted)' }}>🌐 Gateway Enforcement:</span>
+            <div style={{ color: 'var(--warning)', fontWeight: 600, marginTop: '2px' }}>
+              Restricted to Campus Subnet
+            </div>
+          </div>
+        </div>
 
         <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', flexWrap: 'wrap' }}>
           <button

@@ -18,6 +18,10 @@ export const envSchema = z.object({
   DATABASE_URL: z.string().optional().default('postgresql://postgres:postgres@localhost:5432/hostel_curfew'),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(15 * 60 * 1000), // 15 minutes
   RATE_LIMIT_MAX_ATTEMPTS: z.coerce.number().default(5), // 5 failed attempts per window
+  AUTHORIZED_WIFI_CIDRS: z.string().default(
+    '192.168.43.0/24,192.168.225.0/24,172.20.10.0/24,192.168.137.0/24,192.168.1.0/24,192.168.20.0/24,192.168.0.0/16,172.29.247.0/24,10.42.0.0/16,127.0.0.1/32'
+  ),
+  WARDEN_SECRET_CODE: z.string().default('486396'),
 }).superRefine((data, ctx) => {
   if (data.NODE_ENV === 'production') {
     if (data.JWT_ACCESS_SECRET === DEV_DEFAULT_ACCESS_SECRET || data.JWT_ACCESS_SECRET.length < 32) {

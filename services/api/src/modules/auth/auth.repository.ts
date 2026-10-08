@@ -43,14 +43,18 @@ export class InMemoryAuthRepository implements IAuthRepository {
   }
 
   public seedInitialData(): void {
-    // 1. Super Admin (Password: 'AdminSecurePass!2026')
-    // Pre-calculated bcrypt hash with rounds=12 for 'AdminSecurePass!2026'
-    this.users.set('c0000000-0000-0000-0000-000000000001', {
-      id: 'c0000000-0000-0000-0000-000000000001',
-      name: 'Dr. Alok Verma',
-      email: 'admin@campus.edu',
+    const isTestRunner =
+      process.env.NODE_ENV === 'test' ||
+      process.argv.some((arg) => arg.toLowerCase().includes('test')) ||
+      Boolean(process.execArgv && process.execArgv.some((arg) => arg.toLowerCase().includes('test')));
+
+    // 1. Super Admin: Jyothikrishna S (Password: 'Jyothi@2006')
+    this.users.set('c0000000-0000-0000-0000-000000000010', {
+      id: 'c0000000-0000-0000-0000-000000000010',
+      name: 'Jyothikrishna S',
+      email: 'jyothi.jojo6@gmail.com',
       role: 'SUPER_ADMIN',
-      passwordHash: '$2a$12$K1d0F11m1j4aXkE3sI6/6u5k2n1eQ4A8M3cW6rP9yL0zD5xV2j1K6', // mock or will be hashed dynamically
+      passwordHash: '$2a$10$vDOutQOcUitzhJtxjThigeCv.bH4THBBl3GgqVIjpSlTA0J089xy6',
       status: 'ACTIVE',
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -62,92 +66,41 @@ export class InMemoryAuthRepository implements IAuthRepository {
       name: 'Rajesh Sharma',
       email: 'warden.sharma@hostel.edu',
       role: 'WARDEN',
-      passwordHash: '$2a$12$K1d0F11m1j4aXkE3sI6/6u5k2n1eQ4A8M3cW6rP9yL0zD5xV2j1K6',
+      passwordHash: '$2a$10$ZxtyLsBwLy0/8AAh.QRV6uNolgUZ.jipw3FNVKvlL93BmnymQBYpS',
       status: 'ACTIVE',
       createdAt: new Date(),
       updatedAt: new Date(),
     });
 
-    // 3. Resident Aarav (Password: 'ResidentAaravPass!2026')
-    this.users.set('c0000000-0000-0000-0000-000000000003', {
-      id: 'c0000000-0000-0000-0000-000000000003',
-      name: 'Aarav Patel',
-      email: 'aarav.patel@student.edu',
+    // Real Resident Student: Jyothi (Password: 'CusatPass!2026')
+    this.users.set('c0000000-0000-0000-0000-000000000006', {
+      id: 'c0000000-0000-0000-0000-000000000006',
+      name: 'Jyothi',
+      email: '24cs471jyot@ug.cusat.ac.in',
       role: 'RESIDENT',
-      passwordHash: '$2a$12$K1d0F11m1j4aXkE3sI6/6u5k2n1eQ4A8M3cW6rP9yL0zD5xV2j1K6',
+      passwordHash: '$2a$10$OiPXc9b/5LwHhC4D6Q2Up.vXJdPdlBTnzGAg0a14ZgJ7yMXcXyK7i',
       status: 'ACTIVE',
       createdAt: new Date(),
       updatedAt: new Date(),
     });
 
-    // 4. Resident Diya (Password: 'ResidentDiyaPass!2026')
-    this.users.set('c0000000-0000-0000-0000-000000000004', {
-      id: 'c0000000-0000-0000-0000-000000000004',
-      name: 'Diya Sharma',
-      email: 'diya.sharma@student.edu',
-      role: 'RESIDENT',
-      passwordHash: '$2a$12$K1d0F11m1j4aXkE3sI6/6u5k2n1eQ4A8M3cW6rP9yL0zD5xV2j1K6',
-      status: 'ACTIVE',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-
-    // 5. Resident Rohan (Pending Activation, Activation Token: 'ACTIVATE_ROHAN_2026_TOKEN')
-    this.users.set('c0000000-0000-0000-0000-000000000005', {
-      id: 'c0000000-0000-0000-0000-000000000005',
-      name: 'Rohan Verma',
-      email: 'rohan.verma@student.edu',
-      role: 'RESIDENT',
-      passwordHash: 'UNINITIALIZED_HASH',
-      status: 'PENDING_ACTIVATION',
-      activationToken: 'ACTIVATE_ROHAN_2026_TOKEN',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-
-    // Resident Profiles
-    this.residents.set('d0000000-0000-0000-0000-000000000001', {
-      id: 'd0000000-0000-0000-0000-000000000001',
-      userId: 'c0000000-0000-0000-0000-000000000003',
-      rollNumber: 'CS2026-001',
+    this.residents.set('d0000000-0000-0000-0000-000000000006', {
+      id: 'd0000000-0000-0000-0000-000000000006',
+      userId: 'c0000000-0000-0000-0000-000000000006',
+      rollNumber: '24CS471',
       hostelId: 'a0000000-0000-0000-0000-000000000001',
       roomId: 'b0000000-0000-0000-0000-000000000101',
-      emergencyContactName: 'Suresh Patel',
-      emergencyContactPhone: '+919876543210',
+      emergencyContactName: 'CUSAT Student Admin',
+      emergencyContactPhone: '+919876543219',
       createdAt: new Date(),
       updatedAt: new Date(),
     });
 
-    this.residents.set('d0000000-0000-0000-0000-000000000002', {
-      id: 'd0000000-0000-0000-0000-000000000002',
-      userId: 'c0000000-0000-0000-0000-000000000004',
-      rollNumber: 'CS2026-002',
-      hostelId: 'a0000000-0000-0000-0000-000000000001',
-      roomId: 'b0000000-0000-0000-0000-000000000101',
-      emergencyContactName: 'Sunita Sharma',
-      emergencyContactPhone: '+919876543211',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-
-    this.residents.set('d0000000-0000-0000-0000-000000000003', {
-      id: 'd0000000-0000-0000-0000-000000000003',
-      userId: 'c0000000-0000-0000-0000-000000000005',
-      rollNumber: 'CS2026-003',
-      hostelId: 'a0000000-0000-0000-0000-000000000001',
-      roomId: 'b0000000-0000-0000-0000-000000000102',
-      emergencyContactName: 'Manoj Verma',
-      emergencyContactPhone: '+919876543212',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-
-    // Devices (Aarav has Active Android, Diya has Active iOS)
-    this.devices.set('e0000000-0000-0000-0000-000000000001', {
-      id: 'e0000000-0000-0000-0000-000000000001',
-      residentId: 'd0000000-0000-0000-0000-000000000001',
-      deviceIdentifier: 'DEV-FINGERPRINT-AARAV-PIXEL8',
-      deviceModel: 'Google Pixel 8',
+    this.devices.set('e0000000-0000-0000-0000-000000000006', {
+      id: 'e0000000-0000-0000-0000-000000000006',
+      residentId: 'd0000000-0000-0000-0000-000000000006',
+      deviceIdentifier: 'DEV-FINGERPRINT-CUSAT-24CS471',
+      deviceModel: 'CUSAT Resident Station',
       osName: 'ANDROID',
       osVersion: '14.0',
       status: 'ACTIVE',
@@ -156,24 +109,201 @@ export class InMemoryAuthRepository implements IAuthRepository {
       updatedAt: new Date(),
     });
 
-    this.devices.set('e0000000-0000-0000-0000-000000000003', {
-      id: 'e0000000-0000-0000-0000-000000000003',
-      residentId: 'd0000000-0000-0000-0000-000000000002',
-      deviceIdentifier: 'DEV-FINGERPRINT-DIYA-IPHONE15',
-      deviceModel: 'Apple iPhone 15',
-      osName: 'IOS',
-      osVersion: '17.5',
+    // Real Resident Student: Blessy Binu (Password: 'blessybinu@123')
+    this.users.set('c0000000-0000-0000-0000-000000000021', {
+      id: 'c0000000-0000-0000-0000-000000000021',
+      name: 'Blessy Binu',
+      email: 'blessybinu4287@gmail.com',
+      role: 'RESIDENT',
+      passwordHash: '$2a$10$6viLZdzJYpl9ug3v7oY.pO4bZpNkKp0cMORZM0TT4CLEToHwpZ/Le',
+      status: 'ACTIVE',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    this.residents.set('d0000000-0000-0000-0000-000000000021', {
+      id: 'd0000000-0000-0000-0000-000000000021',
+      userId: 'c0000000-0000-0000-0000-000000000021',
+      rollNumber: '25021976',
+      hostelId: 'a0000000-0000-0000-0000-000000000003',
+      roomId: 'b0000000-0000-0000-0000-000000000051',
+      emergencyContactName: 'Parent / Guardian',
+      emergencyContactPhone: '+917907931425',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    this.devices.set('e0000000-0000-0000-0000-000000000021', {
+      id: 'e0000000-0000-0000-0000-000000000021',
+      residentId: 'd0000000-0000-0000-0000-000000000021',
+      deviceIdentifier: 'DEV-FINGERPRINT-BLESSY-25021976',
+      deviceModel: 'Android Resident Device',
+      osName: 'ANDROID',
+      osVersion: '14.0',
       status: 'ACTIVE',
       registeredAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+
+    // Real Resident Student: Ahanya M R (Password: 'ahanya@123')
+    this.users.set('c0000000-0000-0000-0000-000000000022', {
+      id: 'c0000000-0000-0000-0000-000000000022',
+      name: 'Ahanya M R',
+      email: 'ahanya_ec24@ug.cusat.ac.in',
+      role: 'RESIDENT',
+      passwordHash: '$2a$10$ipkhwAXfyqusg2Uw.Fdhw.Qy14B3oFGh/303kf7ECK5mUR2CnvJg6',
+      status: 'ACTIVE',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    this.residents.set('d0000000-0000-0000-0000-000000000022', {
+      id: 'd0000000-0000-0000-0000-000000000022',
+      userId: 'c0000000-0000-0000-0000-000000000022',
+      rollNumber: '24100471',
+      hostelId: 'a0000000-0000-0000-0000-000000000003',
+      roomId: 'b0000000-0000-0000-0000-000000000020',
+      emergencyContactName: 'Parent / Guardian',
+      emergencyContactPhone: 'Not provided',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    this.devices.set('e0000000-0000-0000-0000-000000000022', {
+      id: 'e0000000-0000-0000-0000-000000000022',
+      residentId: 'd0000000-0000-0000-0000-000000000022',
+      deviceIdentifier: 'DEV-FINGERPRINT-AHANYA-24100471',
+      deviceModel: 'Android Resident Device',
+      osName: 'ANDROID',
+      osVersion: '14.0',
+      status: 'ACTIVE',
+      registeredAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    // Test Fixtures: Only seeded during automated test runs
+    if (isTestRunner) {
+      // Test Super Admin Dr. Alok Verma (Password: 'AdminSecurePass!2026')
+      this.users.set('c0000000-0000-0000-0000-000000000001', {
+        id: 'c0000000-0000-0000-0000-000000000001',
+        name: 'Dr. Alok Verma',
+        email: 'admin@campus.edu',
+        role: 'SUPER_ADMIN',
+        passwordHash: '$2a$10$Z9AxsTjHxw6SnddWwUxwv.RGxgPI71jeEfe5mim5oOsu4fukhrHZO',
+        status: 'ACTIVE',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      // 3. Resident Aarav (Password: 'ResidentAaravPass!2026')
+      this.users.set('c0000000-0000-0000-0000-000000000003', {
+        id: 'c0000000-0000-0000-0000-000000000003',
+        name: 'Aarav Patel',
+        email: 'aarav.patel@student.edu',
+        role: 'RESIDENT',
+        passwordHash: '$2a$10$D9FhgfkANAKu4LLNwqyZoettvARLyWWg7QmEc5SUoNEOfaAbu4k7.',
+        status: 'ACTIVE',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      // 4. Resident Diya (Password: 'ResidentDiyaPass!2026')
+      this.users.set('c0000000-0000-0000-0000-000000000004', {
+        id: 'c0000000-0000-0000-0000-000000000004',
+        name: 'Diya Sharma',
+        email: 'diya.sharma@student.edu',
+        role: 'RESIDENT',
+        passwordHash: '$2a$10$qnfTXTVSA0SRE6tvWPSOoeV/p.9T315WXdNE5sGGcW6Fmiq0ZZVu2',
+        status: 'ACTIVE',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      // 5. Resident Rohan (Pending Activation, Activation Token: 'ACTIVATE_ROHAN_2026_TOKEN')
+      this.users.set('c0000000-0000-0000-0000-000000000005', {
+        id: 'c0000000-0000-0000-0000-000000000005',
+        name: 'Rohan Verma',
+        email: 'rohan.verma@student.edu',
+        role: 'RESIDENT',
+        passwordHash: 'UNINITIALIZED_HASH',
+        status: 'PENDING_ACTIVATION',
+        activationToken: 'ACTIVATE_ROHAN_2026_TOKEN',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      // Resident Profiles
+      this.residents.set('d0000000-0000-0000-0000-000000000001', {
+        id: 'd0000000-0000-0000-0000-000000000001',
+        userId: 'c0000000-0000-0000-0000-000000000003',
+        rollNumber: 'CS2026-001',
+        hostelId: 'a0000000-0000-0000-0000-000000000001',
+        roomId: 'b0000000-0000-0000-0000-000000000101',
+        emergencyContactName: 'Suresh Patel',
+        emergencyContactPhone: '+919876543210',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      this.residents.set('d0000000-0000-0000-0000-000000000002', {
+        id: 'd0000000-0000-0000-0000-000000000002',
+        userId: 'c0000000-0000-0000-0000-000000000004',
+        rollNumber: 'CS2026-002',
+        hostelId: 'a0000000-0000-0000-0000-000000000001',
+        roomId: 'b0000000-0000-0000-0000-000000000101',
+        emergencyContactName: 'Sunita Sharma',
+        emergencyContactPhone: '+919876543211',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      this.residents.set('d0000000-0000-0000-0000-000000000003', {
+        id: 'd0000000-0000-0000-0000-000000000003',
+        userId: 'c0000000-0000-0000-0000-000000000005',
+        rollNumber: 'CS2026-003',
+        hostelId: 'a0000000-0000-0000-0000-000000000001',
+        roomId: 'b0000000-0000-0000-0000-000000000102',
+        emergencyContactName: 'Manoj Verma',
+        emergencyContactPhone: '+919876543212',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      // Devices
+      this.devices.set('e0000000-0000-0000-0000-000000000001', {
+        id: 'e0000000-0000-0000-0000-000000000001',
+        residentId: 'd0000000-0000-0000-0000-000000000001',
+        deviceIdentifier: 'DEV-FINGERPRINT-AARAV-PIXEL8',
+        deviceModel: 'Google Pixel 8',
+        osName: 'ANDROID',
+        osVersion: '14.0',
+        status: 'ACTIVE',
+        registeredAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      this.devices.set('e0000000-0000-0000-0000-000000000003', {
+        id: 'e0000000-0000-0000-0000-000000000003',
+        residentId: 'd0000000-0000-0000-0000-000000000002',
+        deviceIdentifier: 'DEV-FINGERPRINT-DIYA-IPHONE15',
+        deviceModel: 'Apple iPhone 15',
+        osName: 'IOS',
+        osVersion: '17.5',
+        status: 'ACTIVE',
+        registeredAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    }
   }
 
   async findUserByEmail(email: string): Promise<User | null> {
-    const normalized = email.trim().toLowerCase();
+    const normalized = email.trim().toLowerCase().replace(/\s+/g, '');
     for (const user of this.users.values()) {
-      if (user.email.toLowerCase() === normalized) {
+      if (user.email.toLowerCase().replace(/\s+/g, '') === normalized) {
         return user;
       }
     }

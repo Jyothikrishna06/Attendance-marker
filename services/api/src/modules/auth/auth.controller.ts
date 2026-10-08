@@ -7,6 +7,7 @@ import { UnauthorizedError } from '../../common/errors.js';
 export const loginSchema = z.object({
   email: z.string().email('Valid email is required'),
   password: z.string().min(8, 'Password must be at least 8 characters long'),
+  wardenSecretCode: z.string().optional(),
 });
 
 export const refreshSchema = z.object({
@@ -36,7 +37,14 @@ export class AuthController {
   login = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const data = loginSchema.parse(req.body);
-      const result = await this.authService.login(data.email, data.password);
+      const result = await this.authService.login(data.email, data.password, data.wardenSecretCode);
+
+      // Save login session in browser cookies (7-day session)
+      res.setHeader('Set-Cookie', [
+        `auth_token=${result.accessToken}; Path=/; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}`,
+        `session_user=${encodeURIComponent(JSON.stringify(result.user))}; Path=/; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}`,
+      ]);
+
       res.status(200).json({
         data: result,
         message: 'Authentication successful',
@@ -50,6 +58,11 @@ export class AuthController {
     try {
       const data = refreshSchema.parse(req.body);
       const result = await this.authService.refresh(data.refreshToken);
+
+      res.setHeader('Set-Cookie', [
+        `auth_token=${result.accessToken}; Path=/; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}`,
+      ]);
+
       res.status(200).json({
         data: result,
         message: 'Token successfully refreshed',
@@ -63,6 +76,13 @@ export class AuthController {
     try {
       const data = logoutSchema.parse(req.body);
       const result = await this.authService.logout(data.refreshToken);
+
+      // Clear session cookies on logout
+      res.setHeader('Set-Cookie', [
+        'auth_token=; Path=/; SameSite=Lax; Max-Age=0',
+        'session_user=; Path=/; SameSite=Lax; Max-Age=0',
+      ]);
+
       res.status(200).json({
         data: result,
       });

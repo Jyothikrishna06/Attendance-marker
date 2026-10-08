@@ -665,3 +665,10 @@ tbody td {
   margin-top: 0.5rem;
   color: var(--text-main);
 }
+
+/* Masked PIN Input to prevent browser password managers from capturing secret codes */
+.masked-pin-input {
+  -webkit-text-security: disc;
+  text-security: disc;
+}
+

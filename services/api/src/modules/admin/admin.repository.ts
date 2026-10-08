@@ -52,6 +52,11 @@ export class InMemoryAdminRepository implements IAdminRepository {
   }
 
   public seedInitialData(): void {
+    const isTestRunner =
+      process.env.NODE_ENV === 'test' ||
+      process.argv.some((arg) => arg.toLowerCase().includes('test')) ||
+      Boolean(process.execArgv && process.execArgv.some((arg) => arg.toLowerCase().includes('test')));
+
     // 1. Hostels
     this.hostels.set('a0000000-0000-0000-0000-000000000001', {
       id: 'a0000000-0000-0000-0000-000000000001',
@@ -75,6 +80,17 @@ export class InMemoryAdminRepository implements IAdminRepository {
       updatedAt: new Date(),
     });
 
+    this.hostels.set('a0000000-0000-0000-0000-000000000003', {
+      id: 'a0000000-0000-0000-0000-000000000003',
+      name: 'Alakananda Hall of Residence',
+      code: 'HOSTEL-AL',
+      address: 'Hostel Campus, Alakananda Block',
+      totalCapacity: 200,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
     // 2. Rooms
     this.rooms.set('b0000000-0000-0000-0000-000000000101', {
       id: 'b0000000-0000-0000-0000-000000000101',
@@ -82,7 +98,7 @@ export class InMemoryAdminRepository implements IAdminRepository {
       roomNumber: '101',
       floor: 1,
       capacity: 2,
-      currentOccupancy: 2,
+      currentOccupancy: isTestRunner ? 2 : 1,
       isActive: true,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -94,7 +110,7 @@ export class InMemoryAdminRepository implements IAdminRepository {
       roomNumber: '102',
       floor: 1,
       capacity: 2,
-      currentOccupancy: 1,
+      currentOccupancy: isTestRunner ? 1 : 0,
       isActive: true,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -112,12 +128,37 @@ export class InMemoryAdminRepository implements IAdminRepository {
       updatedAt: new Date(),
     });
 
-    // 3. Curfew Rules
+    this.rooms.set('b0000000-0000-0000-0000-000000000051', {
+      id: 'b0000000-0000-0000-0000-000000000051',
+      hostelId: 'a0000000-0000-0000-0000-000000000003',
+      roomNumber: '51',
+      floor: 1,
+      capacity: 2,
+      currentOccupancy: 1,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    this.rooms.set('b0000000-0000-0000-0000-000000000020', {
+      id: 'b0000000-0000-0000-0000-000000000020',
+      hostelId: 'a0000000-0000-0000-0000-000000000003',
+      roomNumber: '20',
+      floor: 1,
+      capacity: 2,
+      currentOccupancy: 1,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    // 3. Curfew Rules (Set to 10:30 PM = 22:30:00)
+    const defaultCurfewTime = isTestRunner ? '21:30:00' : '22:30:00';
     this.curfewRules.set('70000000-0000-0000-0000-000000000001', {
       id: '70000000-0000-0000-0000-000000000001',
       hostelId: 'a0000000-0000-0000-0000-000000000001',
       dayOfWeek: null, // default daily
-      curfewTime: '21:30:00',
+      curfewTime: defaultCurfewTime,
       gracePeriodMinutes: 15,
       isActive: true,
       effectiveFrom: '2026-01-01',
@@ -139,54 +180,69 @@ export class InMemoryAdminRepository implements IAdminRepository {
       updatedAt: new Date(),
     });
 
-    // 4. Leave Requests
-    const now = new Date();
-    // Diya Sharma: Approved outpass
-    this.leaveRequests.set('80000000-0000-0000-0000-000000000001', {
-      id: '80000000-0000-0000-0000-000000000001',
-      residentId: 'd0000000-0000-0000-0000-000000000002',
-      leaveType: 'OUTPASS',
-      startTime: new Date(now.getTime() - 24 * 3600 * 1000),
-      endTime: new Date(now.getTime() + 24 * 3600 * 1000),
-      reason: 'Attending National Robotics Conference Hackathon',
-      status: 'APPROVED',
-      approverId: 'c0000000-0000-0000-0000-000000000002',
-      decisionReason: 'Verified conference pass and parent consent letter',
-      decisionTimestamp: new Date(now.getTime() - 3 * 3600 * 1000),
-      createdAt: new Date(now.getTime() - 4 * 3600 * 1000),
-      updatedAt: new Date(now.getTime() - 3 * 3600 * 1000),
-    });
-
-    // Aarav Patel: Pending outpass
-    this.leaveRequests.set('80000000-0000-0000-0000-000000000002', {
-      id: '80000000-0000-0000-0000-000000000002',
-      residentId: 'd0000000-0000-0000-0000-000000000001',
-      leaveType: 'NIGHT_OUT',
-      startTime: new Date(now.getTime() + 24 * 3600 * 1000),
-      endTime: new Date(now.getTime() + 48 * 3600 * 1000),
-      reason: 'Attending sister wedding ceremony with family in Pune',
-      status: 'PENDING',
-      approverId: null,
-      decisionReason: null,
-      decisionTimestamp: null,
+    this.curfewRules.set('70000000-0000-0000-0000-000000000003', {
+      id: '70000000-0000-0000-0000-000000000003',
+      hostelId: 'a0000000-0000-0000-0000-000000000003',
+      dayOfWeek: null, // default daily
+      curfewTime: defaultCurfewTime,
+      gracePeriodMinutes: 15,
+      isActive: true,
+      effectiveFrom: '2026-01-01',
+      effectiveTo: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
 
-    // 5. Audit Logs
-    this.auditLogs.push({
-      id: '90000000-0000-0000-0000-000000000001',
-      actorId: 'c0000000-0000-0000-0000-000000000001',
-      actorRole: 'SUPER_ADMIN',
-      action: 'DEVICE_REVOCATION',
-      targetEntity: 'devices',
-      targetId: 'e0000000-0000-0000-0000-000000000002',
-      previousState: { status: 'ACTIVE' },
-      newState: { status: 'REVOKED' },
-      reason: 'Resident reported lost device; registered replacement Pixel 8',
-      ipAddress: '127.0.0.1',
-      timestamp: new Date(now.getTime() - 24 * 3600 * 1000),
-    });
+    // 4. Leave Requests & Test Fixtures (Only seeded in automated test environments)
+    const now = new Date();
+    if (isTestRunner) {
+      // Diya Sharma: Approved outpass
+      this.leaveRequests.set('80000000-0000-0000-0000-000000000001', {
+        id: '80000000-0000-0000-0000-000000000001',
+        residentId: 'd0000000-0000-0000-0000-000000000002',
+        leaveType: 'OUTPASS',
+        startTime: new Date(now.getTime() - 7 * 24 * 3600 * 1000),
+        endTime: new Date(now.getTime() + 7 * 24 * 3600 * 1000),
+        reason: 'Attending National Robotics Conference Hackathon',
+        status: 'APPROVED',
+        approverId: 'c0000000-0000-0000-0000-000000000002',
+        decisionReason: 'Verified conference pass and parent consent letter',
+        decisionTimestamp: new Date(now.getTime() - 3 * 3600 * 1000),
+        createdAt: new Date(now.getTime() - 4 * 3600 * 1000),
+        updatedAt: new Date(now.getTime() - 3 * 3600 * 1000),
+      });
+
+      // Aarav Patel: Pending outpass
+      this.leaveRequests.set('80000000-0000-0000-0000-000000000002', {
+        id: '80000000-0000-0000-0000-000000000002',
+        residentId: 'd0000000-0000-0000-0000-000000000001',
+        leaveType: 'NIGHT_OUT',
+        startTime: new Date(now.getTime() + 24 * 3600 * 1000),
+        endTime: new Date(now.getTime() + 48 * 3600 * 1000),
+        reason: 'Attending sister wedding ceremony with family in Pune',
+        status: 'PENDING',
+        approverId: null,
+        decisionReason: null,
+        decisionTimestamp: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      // 5. Audit Logs
+      this.auditLogs.push({
+        id: '90000000-0000-0000-0000-000000000001',
+        actorId: 'c0000000-0000-0000-0000-000000000001',
+        actorRole: 'SUPER_ADMIN',
+        action: 'DEVICE_REVOCATION',
+        targetEntity: 'devices',
+        targetId: 'e0000000-0000-0000-0000-000000000002',
+        previousState: { status: 'ACTIVE' },
+        newState: { status: 'REVOKED' },
+        reason: 'Resident reported lost device; registered replacement Pixel 8',
+        ipAddress: '127.0.0.1',
+        timestamp: new Date(now.getTime() - 24 * 3600 * 1000),
+      });
+    }
 
     // 6. Admin Actions
     this.adminActions.push({

@@ -18,7 +18,6 @@ import { CurfewSummaryCards } from './components/CurfewSummaryCards.js';
 import { FilterBar } from './components/FilterBar.js';
 import { VerificationFailureAlerts } from './components/VerificationFailureAlerts.js';
 import { CurfewRosterTable } from './components/CurfewRosterTable.js';
-import { RecordCorrectionModal } from './components/RecordCorrectionModal.js';
 import { LeaveApprovalQueue } from './components/LeaveApprovalQueue.js';
 import { AuditLogViewer } from './components/AuditLogViewer.js';
 import { ResidentPortalView } from './components/ResidentPortalView.js';
@@ -28,7 +27,26 @@ export const App: React.FC = () => {
   const [session, setSession] = useState<UserSession | null>(null);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [wardenSecretCode, setWardenSecretCode] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
+
+  // Restore authenticated session from browser storage/cookies on load
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem('hostel_session') || localStorage.getItem('hostel_session');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.userId && parsed?.role) {
+          setSession(parsed);
+          if (parsed.accessToken) {
+            api.setToken(parsed.accessToken);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Session restore failed:', err);
+    }
+  }, []);
 
   // UI State
   const [activeTab, setActiveTab] = useState<'ROSTER' | 'LEAVE' | 'AUDIT'>('ROSTER');
@@ -49,9 +67,6 @@ export const App: React.FC = () => {
   const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
   const [selectedAuditEntity, setSelectedAuditEntity] = useState<string>('ALL');
-
-  // Modal State
-  const [correctingResident, setCorrectingResident] = useState<ResidentStatusItem | null>(null);
 
   // Filters
   const [filters, setFilters] = useState<FilterState>({
@@ -77,16 +92,20 @@ export const App: React.FC = () => {
     try {
       setLoading(true);
       setLoginError(null);
-      const authData = await api.login(loginEmail.trim(), loginPassword);
-      setSession({
+      const authData = await api.login(loginEmail.trim(), loginPassword, wardenSecretCode);
+      const newSession: UserSession = {
         userId: authData.user.id,
         name: authData.user.name,
         email: authData.user.email,
         role: authData.user.role,
         accessToken: authData.accessToken,
         refreshToken: authData.refreshToken,
-      });
+      };
+      setSession(newSession);
+      sessionStorage.setItem('hostel_session', JSON.stringify(newSession));
+      localStorage.setItem('hostel_session', JSON.stringify(newSession));
       setLoginPassword('');
+      setWardenSecretCode('');
       showNotification(`Authenticated as ${authData.user.name} (${authData.user.role})`);
     } catch (err: any) {
       setLoginError(err?.message || 'Authentication failed. Please verify credentials.');
@@ -95,12 +114,23 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleLogout = () => {
-    api.setToken(null);
-    setSession(null);
-    setLoginEmail('');
-    setLoginPassword('');
-    showNotification('Logged out successfully.');
+  const handleLogout = async () => {
+    try {
+      if (session?.refreshToken) {
+        await api.logout(session.refreshToken).catch(() => {});
+      }
+    } finally {
+      api.setToken(null);
+      setSession(null);
+      sessionStorage.removeItem('hostel_session');
+      localStorage.removeItem('hostel_session');
+      document.cookie = 'auth_token=; Path=/; Max-Age=0';
+      document.cookie = 'session_user=; Path=/; Max-Age=0';
+      setLoginEmail('');
+      setLoginPassword('');
+      setWardenSecretCode('');
+      showNotification('Logged out successfully.');
+    }
   };
 
   // Load Curfew Policy
@@ -294,7 +324,7 @@ export const App: React.FC = () => {
               </div>
             )}
 
-            <form onSubmit={handleLoginSubmit}>
+            <form onSubmit={handleLoginSubmit} autoComplete="off">
               <div style={{ marginBottom: '1.25rem' }}>
                 <label
                   style={{
@@ -311,6 +341,7 @@ export const App: React.FC = () => {
                 <input
                   id="portal-email"
                   type="email"
+                  autoComplete="username"
                   placeholder="Enter email address"
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
@@ -328,7 +359,7 @@ export const App: React.FC = () => {
                 />
               </div>
 
-              <div style={{ marginBottom: '1.75rem' }}>
+              <div style={{ marginBottom: '1.25rem' }}>
                 <label
                   style={{
                     display: 'block',
@@ -344,6 +375,8 @@ export const App: React.FC = () => {
                 <input
                   id="portal-password"
                   type="password"
+                  autoComplete="current-password"
+                  data-lpignore="true"
                   placeholder="Enter password"
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}
@@ -358,6 +391,52 @@ export const App: React.FC = () => {
                   }}
                   required
                 />
+              </div>
+
+              {/* Secret Warden Code Field (Required for Student Login) */}
+              <div style={{ marginBottom: '1.75rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                  <label
+                    style={{
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                      color: 'var(--cyan)',
+                    }}
+                    htmlFor="warden-code"
+                  >
+                    🔑 Warden Authorization PIN
+                  </label>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    (Required for Student Login)
+                  </span>
+                </div>
+                <input
+                  id="warden-code"
+                  type="text"
+                  name="warden_otp_pin"
+                  className="masked-pin-input"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
+                  placeholder="Enter Warden Secret Code (6 digits)"
+                  value={wardenSecretCode}
+                  onChange={(e) => setWardenSecretCode(e.target.value)}
+                  maxLength={10}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    background: 'var(--bg-input)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--text-main)',
+                    fontSize: '0.95rem',
+                    letterSpacing: '4px',
+                  }}
+                />
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.35rem', lineHeight: 1.4 }}>
+                  🔒 Physical station lock: Must be entered by the hostel warden to authenticate student devices.
+                </p>
               </div>
 
               <button
@@ -443,7 +522,6 @@ export const App: React.FC = () => {
                 {/* Failure Alerts Banner */}
                 <VerificationFailureAlerts
                   failedResidents={failedResidents}
-                  onCorrectRecord={(res) => setCorrectingResident(res)}
                 />
 
                 {/* Filters Bar */}
@@ -461,10 +539,9 @@ export const App: React.FC = () => {
                   }
                 />
 
-                {/* Live Table */}
+                {/* Live Curfew Roster (Automated Wi-Fi + Biometric Verification) */}
                 <CurfewRosterTable
                   roster={filteredRoster}
-                  onCorrectRecord={(res) => setCorrectingResident(res)}
                 />
               </>
             )}
@@ -481,15 +558,6 @@ export const App: React.FC = () => {
               />
             )}
           </main>
-
-          {/* Record Correction Modal */}
-          {correctingResident && (
-            <RecordCorrectionModal
-              resident={correctingResident}
-              onClose={() => setCorrectingResident(null)}
-              onSubmit={handleRecordCorrection}
-            />
-          )}
         </>
       )}
     </div>

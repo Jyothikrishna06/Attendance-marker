@@ -42,25 +42,28 @@ export function createRateLimiter(options: RateLimitOptions) {
     const now = Date.now();
     let record = hits.get(clientKey);
 
+    const maxAttempts = options.maxAttempts || 100;
+    const windowMs = options.windowMs || 60 * 1000;
+
     if (!record || now > record.resetTime) {
       record = {
         count: 1,
-        resetTime: now + options.windowMs,
+        resetTime: now + windowMs,
       };
       hits.set(clientKey, record);
     } else {
       record.count += 1;
     }
 
-    const remaining = Math.max(0, options.maxAttempts - record.count);
+    const remaining = Math.max(0, maxAttempts - record.count);
     const retryAfterSeconds = Math.ceil((record.resetTime - now) / 1000);
 
-    res.setHeader('X-RateLimit-Limit', options.maxAttempts);
-    res.setHeader('X-RateLimit-Remaining', remaining);
-    res.setHeader('X-RateLimit-Reset', Math.ceil(record.resetTime / 1000));
+    res.setHeader('X-RateLimit-Limit', String(maxAttempts));
+    res.setHeader('X-RateLimit-Remaining', String(remaining));
+    res.setHeader('X-RateLimit-Reset', String(Math.ceil(record.resetTime / 1000)));
 
-    if (record.count > options.maxAttempts) {
-      res.setHeader('Retry-After', retryAfterSeconds);
+    if (record.count > maxAttempts) {
+      res.setHeader('Retry-After', String(retryAfterSeconds));
       throw new TooManyRequestsError(options.message || 'Too many authentication attempts. Please try again later.');
     }
 

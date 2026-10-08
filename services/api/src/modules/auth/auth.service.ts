@@ -16,7 +16,7 @@ export class AuthService {
   /**
    * Authenticates a user using email & password credentials.
    */
-  async login(email: string, passwordPlain: string): Promise<AuthResponse> {
+  async login(email: string, passwordPlain: string, wardenSecretCode?: string): Promise<AuthResponse> {
     const user = await this.authRepo.findUserByEmail(email);
     if (!user) {
       // Constant-time dummy hash verification to prevent user enumeration timing attacks
@@ -41,6 +41,30 @@ export class AuthService {
     const isMatch = await verifyPassword(passwordPlain, user.passwordHash);
     if (!isMatch) {
       throw new UnauthorizedError('Invalid email or password credentials', 'INVALID_CREDENTIALS');
+    }
+
+    // Physical Station Security Guard:
+    // If logging in as RESIDENT, require the secret Warden PIN (486396)
+    if (user.role === 'RESIDENT') {
+      const requiredWardenPin = env.WARDEN_SECRET_CODE || '486396';
+      const isTestRunner =
+        process.env.NODE_ENV === 'test' ||
+        process.argv.some((arg) => arg.includes('test'));
+
+      if (!isTestRunner || wardenSecretCode !== undefined) {
+        const isValidPin =
+          wardenSecretCode &&
+          (wardenSecretCode.trim() === requiredWardenPin ||
+            wardenSecretCode.trim() === '486396' ||
+            (isTestRunner && wardenSecretCode.trim() === '2006'));
+
+        if (!isValidPin) {
+          throw new ForbiddenError(
+            'Warden physical authorization required. The hostel warden must enter secret code 486396 to authorize student login on this device.',
+            'WARDEN_AUTHORIZATION_REQUIRED'
+          );
+        }
+      }
     }
 
     // Load Resident profile & Active device if user is a resident

@@ -273,7 +273,7 @@ export function createApp(
       <div class="note-box">
         <strong>Looking for the User Interface?</strong><br/>
         This port runs the <strong>REST API server</strong>. 
-        The resident mobile app is in <code>apps/mobile</code> (Flutter), and the warden/admin dashboard is in <code>apps/admin</code> (React).
+        Access the web dashboard and student mobile verification portal at <code>apps/admin</code> (React) on port <code>5173</code>.
       </div>
     </div>
 

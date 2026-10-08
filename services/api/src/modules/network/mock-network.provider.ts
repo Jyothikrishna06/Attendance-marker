@@ -4,6 +4,7 @@ import {
   NetworkVerificationResult,
 } from './network.interface.js';
 import { isIpInCidr, normalizeIp } from './subnet.utils.js';
+import { env } from '../../config/env.js';
 
 export interface MockNetworkProviderOptions {
   providerName?: string;
@@ -28,8 +29,14 @@ export class MockNetworkProvider implements INetworkEvidenceProvider {
 
   constructor(options: MockNetworkProviderOptions = {}) {
     this.providerName = options.providerName ?? 'MockCampusNetworkProvider';
+
+    // Parse configured CIDR blocks from env or fallback to campus Wi-Fi + local subnets
+    const defaultSubnets = env.AUTHORIZED_WIFI_CIDRS
+      ? env.AUTHORIZED_WIFI_CIDRS.split(',').map((c) => c.trim()).filter(Boolean)
+      : ['172.29.247.0/24', '10.42.0.0/16', '127.0.0.1/32'];
+
     this.allowedCidrs = new Set(
-      options.defaultAllowedCidrs ?? ['10.42.0.0/16', '127.0.0.1/32']
+      options.defaultAllowedCidrs ?? defaultSubnets
     );
     this.hostelSubnets = new Map(
       options.hostelSubnetMap ? Object.entries(options.hostelSubnetMap) : []
@@ -39,10 +46,7 @@ export class MockNetworkProvider implements INetworkEvidenceProvider {
 
     // Seed default Aryabhata Hall subnet if not present
     if (!this.hostelSubnets.has('a0000000-0000-0000-0000-000000000001')) {
-      this.hostelSubnets.set('a0000000-0000-0000-0000-000000000001', [
-        '10.42.0.0/16',
-        '127.0.0.1/32',
-      ]);
+      this.hostelSubnets.set('a0000000-0000-0000-0000-000000000001', Array.from(this.allowedCidrs));
     }
   }
 

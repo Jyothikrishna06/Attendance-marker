@@ -3,10 +3,10 @@ import { ResidentStatusItem, ResidentStatus } from '../types/index.js';
 
 interface CurfewRosterTableProps {
   roster: ResidentStatusItem[];
-  onCorrectRecord: (resident: ResidentStatusItem) => void;
+  onCorrectRecord?: (resident: ResidentStatusItem) => void;
 }
 
-export const CurfewRosterTable: React.FC<CurfewRosterTableProps> = ({ roster, onCorrectRecord }) => {
+export const CurfewRosterTable: React.FC<CurfewRosterTableProps> = ({ roster }) => {
   const getBadgeClass = (status: ResidentStatus) => {
     switch (status) {
       case 'VERIFIED_INSIDE': return 'badge-inside';
@@ -59,7 +59,7 @@ export const CurfewRosterTable: React.FC<CurfewRosterTableProps> = ({ roster, on
               <th>Current Status</th>
               <th>Last Seen</th>
               <th>Emergency Contact</th>
-              <th style={{ textAlign: 'right' }}>Actions</th>
+              <th>Verification Evidence (Wi-Fi + Biometric)</th>
             </tr>
           </thead>
           <tbody>
@@ -124,14 +124,29 @@ export const CurfewRosterTable: React.FC<CurfewRosterTableProps> = ({ roster, on
                   </div>
                 </td>
 
-                <td style={{ textAlign: 'right' }}>
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => onCorrectRecord(resident)}
-                    title="Correct presence status with mandatory audit log"
-                  >
-                    ✏️ Correct
-                  </button>
+                <td>
+                  {resident.currentStatus === 'VERIFIED_INSIDE' ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                      <span style={{ color: '#10b981', fontWeight: 600, fontSize: '0.78rem' }}>
+                        📶 Hostel Wi-Fi Verified
+                      </span>
+                      <span style={{ color: '#06b6d4', fontWeight: 600, fontSize: '0.78rem' }}>
+                        🔒 App Biometric Confirmed
+                      </span>
+                    </div>
+                  ) : resident.currentStatus === 'APPROVED_LEAVE' ? (
+                    <span style={{ color: '#c084fc', fontWeight: 600, fontSize: '0.78rem' }}>
+                      🟣 Official Approved Leave
+                    </span>
+                  ) : resident.currentStatus === 'VERIFICATION_FAILED' ? (
+                    <span style={{ color: 'var(--danger)', fontWeight: 600, fontSize: '0.78rem' }}>
+                      ⚠️ Check Failed: {resident.failureAlert?.failureReason || 'Mismatch'}
+                    </span>
+                  ) : (
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                      ⏳ Awaiting Wi-Fi + Biometric Scan
+                    </span>
+                  )}
                 </td>
               </tr>
             ))}

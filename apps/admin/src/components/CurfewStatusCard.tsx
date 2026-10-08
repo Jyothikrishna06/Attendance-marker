@@ -8,7 +8,7 @@ interface CurfewStatusCardProps {
 
 export const CurfewStatusCard: React.FC<CurfewStatusCardProps> = ({ policy, onUpdatePolicy }) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [curfewTime, setCurfewTime] = useState(policy?.curfewTime || '21:30:00');
+  const [curfewTime, setCurfewTime] = useState(policy?.curfewTime || '22:30:00');
   const [graceMinutes, setGraceMinutes] = useState(policy?.gracePeriodMinutes || 15);
   const [justification, setJustification] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -99,10 +99,10 @@ export const CurfewStatusCard: React.FC<CurfewStatusCardProps> = ({ policy, onUp
                     className="filter-input"
                     value={curfewTime}
                     onChange={(e) => setCurfewTime(e.target.value)}
-                    placeholder="21:30:00"
+                    placeholder="22:30:00"
                     required
                   />
-                  <span className="form-hint">24-hour military clock format (e.g. 21:30:00 for 9:30 PM).</span>
+                  <span className="form-hint">24-hour military clock format (e.g. 22:30:00 for 10:30 PM).</span>
                 </div>
 
                 <div className="form-group">

@@ -16,14 +16,20 @@ declare global {
  * Middleware that authenticates incoming requests using a Bearer access token.
  */
 export function authenticate(req: Request, _res: Response, next: NextFunction): void {
+  let token = '';
+
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw new UnauthorizedError('Missing or malformed Authorization header. Expected Bearer token.', 'AUTH_HEADER_MISSING');
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7).trim();
+  } else if (req.headers.cookie) {
+    const match = req.headers.cookie.match(/(?:^|;\s*)auth_token=([^;]+)/);
+    if (match) {
+      token = decodeURIComponent(match[1]);
+    }
   }
 
-  const token = authHeader.substring(7).trim();
   if (!token) {
-    throw new UnauthorizedError('Token payload is empty', 'TOKEN_EMPTY');
+    throw new UnauthorizedError('Missing or malformed Authorization header. Expected Bearer token.', 'AUTH_HEADER_MISSING');
   }
 
   const payload = verifyAccessToken(token);

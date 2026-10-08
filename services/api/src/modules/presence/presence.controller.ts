@@ -10,12 +10,16 @@ export const startEntrySchema = z.object({
 });
 
 export const verifyEntrySchema = z.object({
-  sessionId: z.string().uuid('Session ID must be a valid UUID'),
+  sessionId: z.string().uuid('Session ID must be a valid UUID').optional(),
+  challengeId: z.string().uuid('Challenge ID must be a valid UUID').optional(),
   challengeNonce: z.string().min(16, 'Challenge nonce string is required'),
   biometricConfirmed: z.boolean(),
   networkMetadata: z.record(z.unknown()).optional(),
   idempotencyKey: z.string().optional(),
   clientTimestamp: z.string().optional(), // Observational only
+}).refine((data) => Boolean(data.sessionId || data.challengeId), {
+  message: 'Either sessionId or challengeId is required',
+  path: ['sessionId'],
 });
 
 export const exitSchema = z.object({
@@ -60,8 +64,10 @@ export class PresenceController {
         req.socket.remoteAddress ||
         '127.0.0.1';
 
+      const sessionId = (data.sessionId || data.challengeId)!;
+
       const result = await this.presenceService.verifyEntry(req.user.userId, {
-        sessionId: data.sessionId,
+        sessionId,
         challengeNonce: data.challengeNonce,
         biometricConfirmed: data.biometricConfirmed,
         networkMetadata: data.networkMetadata,
